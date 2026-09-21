@@ -15,15 +15,14 @@ export class PipeTemplate {
   }
 
   toString(): string {
-    return `import { Pipe, type PipeTransform } from "ngjs-core";
+    return `export class ${this.className} {
+  static $name = "${this.pipeName}";
 
-@Pipe({
-  name: "${this.pipeName}",
-})
-export class ${this.className} implements PipeTransform {
-  transform(value: unknown): unknown {
-    return value;
-  }
+  static transform = (() => {
+    const _ = () => (value: unknown): unknown => value;
+    _.$inject = [] as string[];
+    return _;
+  })();
 }
 `;
   }

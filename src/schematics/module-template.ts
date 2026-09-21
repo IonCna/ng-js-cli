@@ -14,13 +14,12 @@ export class ModuleTemplate {
   }
 
   toString(): string {
-    return `import { NgModule } from "ngjs-core";
+    return `import angular from "angular";
 
-@NgModule({
-  declarations: [],
-  imports: [],
-})
-export class ${this.className} {}
+export class ${this.className} {
+  static $name = "${this.className}";
+  static ɵmod = angular.module(${this.className}.$name, []);
+}
 `;
   }
 

@@ -3,10 +3,8 @@ import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
 
 /**
- * `@Service()` (default) = el equivalente de `ngjs-core` a
- * `@Injectable({ providedIn: 'root' })` de Angular real — auto-registrado,
- * sin `providers`. `--scoped` = `@Injectable()` a secas, igual que Angular
- * cuando NO se auto-registra en root: necesita `providers: [...]` a mano.
+ * v1 sin `ngjs-core`: clase plana con `$name` estático, sin decorador — por
+ * eso `scoped` (`@Service()` vs `@Injectable()`) todavía no cambia la salida.
  */
 export class ServiceTemplate {
   private constructor(
@@ -21,11 +19,10 @@ export class ServiceTemplate {
   }
 
   toString(): string {
-    const decorator = this.scoped ? "Injectable" : "Service";
-    return `import { ${decorator} } from "ngjs-core";
-
-@${decorator}()
-export class ${this.className} {}
+    return `export class ${this.className} {
+  static $name = "${this.className}";
+  static $inject = [];
+}
 `;
   }
 

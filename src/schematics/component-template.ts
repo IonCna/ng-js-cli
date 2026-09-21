@@ -6,23 +6,26 @@ export class ComponentTemplate {
   private constructor(
     public readonly fileBase: string,
     public readonly className: string,
-    public readonly selector: string,
+    /** Nombre de registro en AngularJS (`appCard`) — el selector no existe sin core, es su versión camelCase. */
+    public readonly registerName: string,
   ) {}
 
   static from(name: string, prefix = "app"): ComponentTemplate {
     const fileBase = CaseTransform.toKebabCase(name);
-    return new ComponentTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Component`, `${prefix}-${fileBase}`);
+    const registerName = CaseTransform.toCamelCase(`${prefix}-${fileBase}`);
+    return new ComponentTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Component`, registerName);
   }
 
   toString(): string {
-    return `import { Component } from "ngjs-core";
-
-@Component({
-  selector: "${this.selector}",
-  templateUrl: "./${this.fileBase}.component.html",
-  styleUrl: "./${this.fileBase}.component.css",
-})
-export class ${this.className} {}
+    return `export class ${this.className} {
+  static $name = "${this.registerName}";
+  static ɵcmp = {
+    templateUrl: "./${this.fileBase}.component.html",
+    styleUrl: "./${this.fileBase}.component.css",
+    controller: ${this.className},
+  };
+  static $inject = [];
+}
 `;
   }
 

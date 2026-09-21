@@ -6,22 +6,25 @@ export class DirectiveTemplate {
   private constructor(
     public readonly fileBase: string,
     public readonly className: string,
-    public readonly selector: string,
+    /** Nombre de registro en AngularJS (`appHighlight`) — el selector no existe sin core. */
+    public readonly registerName: string,
   ) {}
 
   static from(name: string, prefix = "app"): DirectiveTemplate {
     const fileBase = CaseTransform.toKebabCase(name);
-    const attribute = `${prefix}${CaseTransform.toPascalCase(name)}`;
-    return new DirectiveTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Directive`, `[${attribute}]`);
+    const registerName = CaseTransform.toCamelCase(`${prefix}-${fileBase}`);
+    return new DirectiveTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Directive`, registerName);
   }
 
   toString(): string {
-    return `import { Directive } from "ngjs-core";
-
-@Directive({
-  selector: "${this.selector}",
-})
-export class ${this.className} {}
+    return `export class ${this.className} {
+  static $name = "${this.registerName}";
+  static ɵdir = {
+    restrict: "A",
+    controller: ${this.className},
+  };
+  static $inject = [];
+}
 `;
   }
 
