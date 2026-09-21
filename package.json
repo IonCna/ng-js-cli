@@ -4,7 +4,11 @@
   "description": "CLI de build/dev para proyectos ngjs-core — SWC para decoradores, esbuild para build, Vite (ng-js-vite) para dev-server.",
   "type": "module",
   "private": true,
+  "bin": {
+    "ngjs": "dist/index.js"
+  },
   "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --banner:js=\"#!/usr/bin/env node\" --outfile=dist/index.js",
     "test": "vitest run"
   },
   "dependencies": {
