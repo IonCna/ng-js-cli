@@ -2,7 +2,6 @@ import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { GenerateConfig } from "@/config/generate-config.ts";
-import { ModuleRegistrar } from "@/schematics/module-registrar.ts";
 import { resolveSchematic } from "@/schematics/schematic-registry.ts";
 
 export class GenerateCommand extends NgjsCommand<GenerateConfig> {
@@ -19,31 +18,11 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
     }
 
     const { dir, name } = this.resolveTarget();
-
-    // En modo `core` el CLI solo estampa la clase con su decorador — el registro en el
-    // módulo (`declarations`, etc.) es manual, `ModuleRegistrar` asume la forma sin core
-    // (`static ɵmod = angular.module(...)` + `.component()`/`.directive()` encadenados).
-    const modulePath = this.config.core ? undefined : await this.findModule(dir, name, schematic.kind);
-
     await mkdir(dir, { recursive: true });
-    const generated = await schematic.generate(name, dir, {
-      prefix: this.config.prefix,
-      scoped: this.config.scoped,
-      core: this.config.core,
-    });
-    if (modulePath) await ModuleRegistrar.register(modulePath, generated, dir);
-  }
 
-  /** Se busca ANTES de escribir: si no hay módulo donde registrar, falla sin dejar archivos sueltos.
-   * Un `module` nuevo puede ser el primero del proyecto — sin padre no hay a quién registrarlo, y no es error. */
-  private async findModule(dir: string, name: string, kind: string): Promise<string | undefined> {
-    const modulePath = await ModuleRegistrar.find(dir, this.config.sourceRoot);
-    if (!modulePath && kind !== "module") {
-      throw new Error(
-        `No se encontró ningún módulo (*.module.ts) desde "${dir}" hasta "${this.config.sourceRoot}" donde registrar "${name}".`,
-      );
-    }
-    return modulePath;
+    // El registro en el módulo (`declarations`/`imports` del `@NgModule`) queda manual —
+    // el CLI solo estampa la clase con su decorador, ver `docs/ROADMAP.md`.
+    await schematic.generate(name, dir, { prefix: this.config.prefix });
   }
 
   /** `feature/card` → escribe en `<sourceRoot>/feature`, con nombre base `card`. */
@@ -55,8 +34,8 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
 }
 
 /** Lo que `commander` invoca en `.action(...)` — todo lo que necesita para registrar el comando vive acá al lado. */
-export async function runGenerateCommand(schematic: string, name: string, options: { scoped?: boolean }): Promise<void> {
-  const config = await GenerateConfig.create({ schematic, name, scoped: options.scoped });
+export async function runGenerateCommand(schematic: string, name: string): Promise<void> {
+  const config = await GenerateConfig.create({ schematic, name });
   const cmd = GenerateCommand.from(config);
   await cmd.run();
 }

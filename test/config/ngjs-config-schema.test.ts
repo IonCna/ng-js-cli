@@ -26,7 +26,6 @@ const validConfig: NgjsConfig = {
     },
     serve: { options: { port: 4200 }, configurations: { staging: { port: 4300 } } },
   },
-  cli: { defaultCollection: "ngjs-core" },
 };
 
 describe("ngjsConfigSchema", () => {
@@ -49,10 +48,5 @@ describe("ngjsConfigSchema", () => {
   it("rechaza si falta un campo requerido", () => {
     const { version: _version, ...withoutVersion } = validConfig;
     expect(ngjsConfigSchema.safeParse(withoutVersion).success).toBe(false);
-  });
-
-  it("rechaza un cli.defaultCollection desconocido", () => {
-    const invalid = { ...validConfig, cli: { defaultCollection: "nope" } };
-    expect(ngjsConfigSchema.safeParse(invalid).success).toBe(false);
   });
 });

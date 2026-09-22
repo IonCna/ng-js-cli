@@ -6,14 +6,10 @@ import { ServiceTemplate } from "@/schematics/service-template.ts";
 
 export interface SchematicContext {
   prefix: string;
-  scoped: boolean;
-  /** `ngjs.json` → `schematics["*"|kind].core`, ya resuelto — ver `SchematicOptions` en `cli-config.ts`. */
-  core: boolean;
 }
 
 export type SchematicKind = "component" | "directive" | "pipe" | "service" | "module";
 
-/** Lo que `ModuleRegistrar` necesita para registrar lo recién generado — `fileName` va sin extensión (`card.component`). */
 export interface GeneratedSchematic {
   kind: SchematicKind;
   className: string;
@@ -25,27 +21,27 @@ type Schematic = (name: string, dir: string, context: SchematicContext) => Promi
 /** Diccionario cerrado — sin soporte para schematics de terceros, esto es todo lo que hay. */
 const SCHEMATICS: Record<SchematicKind, Schematic> = {
   component: async (name, dir, ctx) => {
-    const template = ComponentTemplate.from(name, ctx.prefix, ctx.core);
+    const template = ComponentTemplate.from(name, ctx.prefix);
     await template.write(dir);
     return { kind: "component", className: template.className, fileName: `${template.fileBase}.component` };
   },
   directive: async (name, dir, ctx) => {
-    const template = DirectiveTemplate.from(name, ctx.prefix, ctx.core);
+    const template = DirectiveTemplate.from(name, ctx.prefix);
     await template.write(dir);
     return { kind: "directive", className: template.className, fileName: `${template.fileBase}.directive` };
   },
-  pipe: async (name, dir, ctx) => {
-    const template = PipeTemplate.from(name, ctx.core);
+  pipe: async (name, dir) => {
+    const template = PipeTemplate.from(name);
     await template.write(dir);
     return { kind: "pipe", className: template.className, fileName: `${template.fileBase}.pipe` };
   },
-  service: async (name, dir, ctx) => {
-    const template = ServiceTemplate.from(name, ctx.scoped, ctx.core);
+  service: async (name, dir) => {
+    const template = ServiceTemplate.from(name);
     await template.write(dir);
     return { kind: "service", className: template.className, fileName: `${template.fileBase}.service` };
   },
-  module: async (name, dir, ctx) => {
-    const template = ModuleTemplate.from(name, ctx.core);
+  module: async (name, dir) => {
+    const template = ModuleTemplate.from(name);
     await template.write(dir);
     return { kind: "module", className: template.className, fileName: `${template.fileBase}.module` };
   },

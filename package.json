@@ -1,7 +1,7 @@
 {
   "name": "ng-js-cli",
   "version": "0.1.0",
-  "description": "CLI de build/dev para proyectos ngjs-core — SWC para decoradores, esbuild para build, Vite (ng-js-vite) para dev-server.",
+  "description": "CLI de proyectos ngjs-core — orquesta scaffolding (new/generate), build (esbuild + ng-js-compiler) y dev-server (Vite + ng-js-vite); la traducción de decoradores a AngularJS vive en ng-js-compiler.",
   "type": "module",
   "private": true,
   "bin": {
@@ -16,7 +16,6 @@
     "commander": "^15.0.0",
     "esbuild": "^0.28.1",
     "ng-js-compiler": "link:ng-js-compiler",
-    "ng-js-template-plugin": "link:ng-js-template-plugin",
     "ng-js-vite": "link:ng-js-vite",
     "zod": "^4.1.0"
   },

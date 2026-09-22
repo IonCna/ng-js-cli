@@ -9,7 +9,6 @@
         "commander": "^15.0.0",
         "esbuild": "^0.28.1",
         "ng-js-compiler": "link:ng-js-compiler",
-        "ng-js-template-plugin": "link:ng-js-template-plugin",
         "ng-js-vite": "link:ng-js-vite",
         "zod": "^4.1.0",
       },
@@ -255,8 +254,6 @@
     "nanoid": ["nanoid@3.3.19", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug=="],
 
     "ng-js-compiler": ["ng-js-compiler@link:ng-js-compiler", {}],
-
-    "ng-js-template-plugin": ["ng-js-template-plugin@link:ng-js-template-plugin", {}],
 
     "ng-js-vite": ["ng-js-vite@link:ng-js-vite", {}],
 

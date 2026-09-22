@@ -5,7 +5,7 @@ import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { BuildConfig, type BuildFlags } from "@/config/build-config.ts";
 import * as esbuild from "esbuild";
 import { pluginLoader } from "ng-js-compiler/esbuild";
-import { templateTransform } from "ng-js-template-plugin";
+import { templateTransform } from "ng-js-vite/esbuild";
 
 type Format = "esm" | "cjs";
 

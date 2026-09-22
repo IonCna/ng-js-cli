@@ -1,7 +1,7 @@
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
-import { ngJsTemplateParser } from "ng-js-vite";
+import { ngJsTemplateParser } from "ng-js-vite/vite";
 import { createServer, type Plugin } from "vite";
 
 export class ServeCommand extends NgjsCommand<ServeConfig> {

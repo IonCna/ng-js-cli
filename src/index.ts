@@ -24,7 +24,6 @@ program
   .alias(generateCommandDefinition.alias)
   .argument("<schematic>", "component | directive | pipe | service | module (o alias c/d/p/s/m)")
   .argument("<name>", "nombre del schematic a generar")
-  .option("--scoped", "solo para 'service' — @Injectable() en vez de @Service()")
   .action(runGenerateCommand);
 
 program

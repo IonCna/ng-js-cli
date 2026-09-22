@@ -6,20 +6,15 @@ export class ModuleTemplate {
   private constructor(
     public readonly fileBase: string,
     public readonly className: string,
-    public readonly core: boolean,
   ) {}
 
-  static from(name: string, core = false): ModuleTemplate {
+  static from(name: string): ModuleTemplate {
     const fileBase = CaseTransform.toKebabCase(name);
-    return new ModuleTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Module`, core);
+    return new ModuleTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Module`);
   }
 
+  /** `declarations`/`imports` quedan vacíos para completar a mano — `generate` no auto-registra, ver `docs/ROADMAP.md`. */
   toString(): string {
-    return this.core ? this.toCoreString() : this.toPlainString();
-  }
-
-  /** Con `core`: `declarations`/`imports` quedan vacíos para completar a mano — `generate` no auto-registra en modo core (ver `generate-command.ts`). */
-  private toCoreString(): string {
     return `import { NgModule } from "ngjs-core";
 
 @NgModule({
@@ -27,16 +22,6 @@ export class ModuleTemplate {
   imports: [],
 })
 export class ${this.className} {}
-`;
-  }
-
-  private toPlainString(): string {
-    return `import angular from "angular";
-
-export class ${this.className} {
-  static $name = "${this.className}";
-  static ɵmod = angular.module(${this.className}.$name, []);
-}
 `;
   }
 

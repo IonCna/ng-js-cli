@@ -62,10 +62,6 @@ const serveTargetSchema = z.object({
   configurations: z.record(z.string(), serveTargetOptionsSchema.partial()).optional(),
 });
 
-const cliSchema = z.object({
-  defaultCollection: z.enum(["ng-js-cli", "ngjs-core"]).optional(),
-});
-
 export const ngjsConfigSchema = z.object({
   version: z.string(),
   root: z.string(),
@@ -76,5 +72,4 @@ export const ngjsConfigSchema = z.object({
     build: buildTargetSchema,
     serve: serveTargetSchema.optional(),
   }),
-  cli: cliSchema.optional(),
 });

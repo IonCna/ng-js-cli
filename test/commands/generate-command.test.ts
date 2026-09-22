@@ -5,14 +5,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GenerateCommand } from "@/commands/generate-command.ts";
 import type { NgjsConfig } from "@/config/cli-config.ts";
 import { GenerateConfig } from "@/config/generate-config.ts";
-import { ModuleTemplate } from "@/schematics/module-template.ts";
 
 async function generate(schematic: string, name: string): Promise<void> {
   const config = await GenerateConfig.create({ schematic, name });
   await GenerateCommand.from(config).run();
 }
 
-describe("GenerateCommand — registro en el módulo más cercano", () => {
+describe("GenerateCommand", () => {
   let dir: string;
   let originalCwd: string;
 
@@ -23,138 +22,73 @@ describe("GenerateCommand — registro en el módulo más cercano", () => {
     await mkdir(join(dir, "src"), { recursive: true });
     await writeFile(
       join(dir, "ngjs.json"),
-      JSON.stringify({ version: "1", root: ".", projectType: "application", sourceRoot: "src", architect: { build: { options: {} } } }),
-      "utf8",
-    );
-  });
-
-  afterEach(async () => {
-    process.chdir(originalCwd);
-    await rm(dir, { recursive: true, force: true });
-  });
-
-  it("el primer módulo del proyecto se genera sin error aunque no haya padre donde registrarlo", async () => {
-    await generate("module", "app");
-
-    expect(await readFile(join(dir, "src", "app.module.ts"), "utf8")).toBe(ModuleTemplate.from("app").toString());
-  });
-
-  it("registra un componente en el módulo del mismo directorio (import sin .ts + .component encadenado)", async () => {
-    await generate("module", "app");
-    await generate("component", "card");
-
-    const module = await readFile(join(dir, "src", "app.module.ts"), "utf8");
-    expect(module).toContain(`import { CardComponent } from "./card.component";`);
-    expect(module).toContain(`angular.module(AppModule.$name, [])\n    .component(CardComponent.$name, CardComponent.ɵcmp);`);
-  });
-
-  it("sube por el árbol hasta el primer módulo y arma el import relativo", async () => {
-    await generate("module", "app");
-    await generate("component", "feature/card");
-
-    const module = await readFile(join(dir, "src", "app.module.ts"), "utf8");
-    expect(module).toContain(`import { CardComponent } from "./feature/card.component";`);
-  });
-
-  it("encadena varias llamadas y cada tipo usa la suya", async () => {
-    await generate("module", "app");
-    await generate("directive", "highlight");
-    await generate("pipe", "upper");
-    await generate("service", "user");
-
-    const module = await readFile(join(dir, "src", "app.module.ts"), "utf8");
-    expect(module).toContain(".directive(HighlightDirective.$name, () => HighlightDirective.ɵdir)");
-    expect(module).toContain(".filter(UpperPipe.$name, UpperPipe.transform)");
-    expect(module).toContain(".service(UserService.$name, UserService)");
-    expect(module.indexOf(".directive(")).toBeLessThan(module.indexOf(".filter("));
-  });
-
-  it("un módulo generado dentro de otro se agrega a `requires` del más cercano", async () => {
-    await generate("module", "app");
-    await generate("module", "feature/shop");
-    await generate("module", "feature/admin");
-
-    const app = await readFile(join(dir, "src", "app.module.ts"), "utf8");
-    // shop se registró en app; admin encuentra a shop (el más cercano subiendo desde feature/), no a app.
-    expect(app).toContain("angular.module(AppModule.$name, [ShopModule.$name])");
-    const shop = await readFile(join(dir, "src", "feature", "shop.module.ts"), "utf8");
-    expect(shop).toContain("angular.module(ShopModule.$name, [AdminModule.$name])");
-  });
-
-  it("sin módulo en todo el camino hasta sourceRoot: error, y no escribe nada", async () => {
-    await expect(generate("component", "feature/card")).rejects.toThrow(/No se encontró ningún módulo/);
-
-    await expect(readFile(join(dir, "src", "feature", "card.component.ts"), "utf8")).rejects.toThrow();
-  });
-
-  it("no sale de sourceRoot: un módulo fuera de `src` no cuenta", async () => {
-    await writeFile(join(dir, "outside.module.ts"), ModuleTemplate.from("outside").toString(), "utf8");
-
-    await expect(generate("component", "card")).rejects.toThrow(/No se encontró ningún módulo/);
-  });
-});
-
-describe("GenerateCommand — modo core (cli.defaultCollection en ngjs.json)", () => {
-  let dir: string;
-  let originalCwd: string;
-
-  beforeEach(async () => {
-    originalCwd = process.cwd();
-    dir = await mkdtemp(join(tmpdir(), "ngjs-generate-core-test-"));
-    process.chdir(dir);
-    await mkdir(join(dir, "src"), { recursive: true });
-  });
-
-  afterEach(async () => {
-    process.chdir(originalCwd);
-    await rm(dir, { recursive: true, force: true });
-  });
-
-  async function writeNgjsConfig(defaultCollection: "ng-js-cli" | "ngjs-core" | undefined): Promise<void> {
-    await writeFile(
-      join(dir, "ngjs.json"),
       JSON.stringify({
         version: "1",
         root: ".",
         projectType: "application",
         sourceRoot: "src",
         architect: { build: { options: { entryPoints: {}, outputPath: "dist" } } },
-        cli: defaultCollection ? { defaultCollection } : undefined,
       } satisfies NgjsConfig),
       "utf8",
     );
-  }
+  });
 
-  it("con cli.defaultCollection: 'ngjs-core', genera con decoradores y sin exigir un módulo donde registrar", async () => {
-    await writeNgjsConfig("ngjs-core");
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await rm(dir, { recursive: true, force: true });
+  });
 
+  it("genera un componente con decorador real, sin exigir un módulo donde registrarlo", async () => {
     await generate("component", "card");
 
     const component = await readFile(join(dir, "src", "card.component.ts"), "utf8");
     expect(component).toContain('import { Component } from "ngjs-core";');
     expect(component).toContain('selector: "app-card"');
-    expect(component).not.toContain("$name");
   });
 
-  it("con cli.defaultCollection: 'ng-js-cli' explícito, sigue en modo plano", async () => {
-    await writeNgjsConfig("ng-js-cli");
+  it("genera una directiva con selector de atributo", async () => {
+    await generate("directive", "highlight");
 
-    await generate("module", "app");
-    await generate("service", "user");
-
-    const service = await readFile(join(dir, "src", "user.service.ts"), "utf8");
-    expect(service).not.toContain("@Injectable");
-    expect(service).toContain("static $name");
+    const directive = await readFile(join(dir, "src", "highlight.directive.ts"), "utf8");
+    expect(directive).toContain('import { Directive } from "ngjs-core";');
+    expect(directive).toContain('selector: "[appHighlight]"');
   });
 
-  it("sin cli.defaultCollection, sigue en modo plano por default", async () => {
-    await writeNgjsConfig(undefined);
-
-    await generate("module", "app"); // pipe en modo plano necesita un módulo donde registrarse
+  it("genera un pipe implementando PipeTransform", async () => {
     await generate("pipe", "upper");
 
     const pipe = await readFile(join(dir, "src", "upper.pipe.ts"), "utf8");
-    expect(pipe).toContain("static $name");
-    expect(pipe).not.toContain("@Pipe");
+    expect(pipe).toContain('import { Pipe, type PipeTransform } from "ngjs-core";');
+    expect(pipe).toContain("implements PipeTransform");
+  });
+
+  it("genera un servicio @Injectable", async () => {
+    await generate("service", "user");
+
+    const service = await readFile(join(dir, "src", "user.service.ts"), "utf8");
+    expect(service).toContain('import { Injectable } from "ngjs-core";');
+    expect(service).toContain("@Injectable()");
+  });
+
+  it("genera un módulo con declarations/imports vacíos", async () => {
+    await generate("module", "app");
+
+    const module = await readFile(join(dir, "src", "app.module.ts"), "utf8");
+    expect(module).toContain('import { NgModule } from "ngjs-core";');
+    expect(module).toContain("declarations: []");
+  });
+
+  it("acepta el alias del schematic (c/d/p/s/m)", async () => {
+    await generate("c", "card");
+    await expect(readFile(join(dir, "src", "card.component.ts"), "utf8")).resolves.toContain("@Component");
+  });
+
+  it("soporta subcarpetas (feature/card)", async () => {
+    await generate("component", "feature/card");
+    await expect(readFile(join(dir, "src", "feature", "card.component.ts"), "utf8")).resolves.toContain("@Component");
+  });
+
+  it("schematic desconocido tira error claro", async () => {
+    await expect(generate("nope", "card")).rejects.toThrow(/Schematic desconocido/);
   });
 });
