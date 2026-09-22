@@ -13,7 +13,7 @@ export class ModuleTemplate {
     return new ModuleTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Module`);
   }
 
-  /** `declarations`/`imports` quedan vacíos para completar a mano — `generate` no auto-registra, ver `docs/ROADMAP.md`. */
+  /** `declarations`/`imports` arrancan vacíos — `generate` los va llenando (`ModuleRegistrar`). */
   toString(): string {
     return `import { NgModule } from "ngjs-core";
 

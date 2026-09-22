@@ -22,8 +22,13 @@ program
 program
   .command(generateCommandDefinition.name)
   .alias(generateCommandDefinition.alias)
-  .argument("<schematic>", "component | directive | pipe | service | module (o alias c/d/p/s/m)")
+  .argument(
+    "<schematic>",
+    "component|directive|pipe|service|module|class|interface|enum|guard|resolver|interceptor (o alias c/d/p/s/m/cl/i/e/g/r/itc)",
+  )
   .argument("<name>", "nombre del schematic a generar")
+  .option("--skip-import", "no registrar en ningún @NgModule")
+  .option("--module <path>", "@NgModule donde registrar, en vez del más cercano")
   .action(runGenerateCommand);
 
 program

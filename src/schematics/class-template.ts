@@ -2,28 +2,22 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
 
-export class ServiceTemplate {
+export class ClassTemplate {
   private constructor(
     public readonly fileBase: string,
     public readonly className: string,
   ) {}
 
-  static from(name: string): ServiceTemplate {
+  static from(name: string): ClassTemplate {
     const fileBase = CaseTransform.toKebabCase(name);
-    return new ServiceTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Service`);
+    return new ClassTemplate(fileBase, CaseTransform.toPascalCase(name));
   }
 
   toString(): string {
-    return `import { Injectable } from "ngjs-core";
-
-@Injectable({
-  providedIn: "root",
-})
-export class ${this.className} {}
-`;
+    return `export class ${this.className} {}\n`;
   }
 
   async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.service.ts`), this.toString(), "utf8");
+    await writeFile(join(dir, `${this.fileBase}.ts`), this.toString(), "utf8");
   }
 }
