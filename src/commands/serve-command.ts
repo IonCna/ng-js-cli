@@ -1,7 +1,6 @@
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
-import { NGJS_COMPILER_TRANSFORMS } from "@/plugins/ngjs-compiler-transforms.ts";
-import { viteTransformPlugin } from "@/plugins/vite-transform-plugin.ts";
+import { viteTransformPlugin } from "ng-js-compiler/vite";
 import { ngJsTemplateParser } from "ng-js-vite";
 import { createServer, type Plugin } from "vite";
 
@@ -28,7 +27,7 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // `Plugin` de `ngJsTemplateParser()` como un tipo nominal distinto al de
       // ESTE `vite` (mismo paquete, dos instancias). En runtime es el mismo
       // objeto de siempre; el cast es solo para esta discrepancia estructural.
-      plugins: [ngJsTemplateParser() as Plugin, viteTransformPlugin(NGJS_COMPILER_TRANSFORMS)],
+      plugins: [ngJsTemplateParser() as Plugin, viteTransformPlugin(this.config.sourceRoot)],
     });
 
     await server.listen();

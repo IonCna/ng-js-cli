@@ -18,6 +18,8 @@ export class BuildConfig extends NgjsCommandConfig {
     /** `projectType: "library"` — esm+cjs (no solo esm). */
     public readonly dualFormat: boolean,
     public readonly fileReplacements: FileReplacement[],
+    /** `ApplicationScanner` (`ng-js-compiler`) escanea desde acá — mismo `sourceRoot` de `ngjs.json`. */
+    public readonly sourceRoot: string,
   ) {
     super();
   }
@@ -39,6 +41,7 @@ export class BuildConfig extends NgjsCommandConfig {
       override?.declarations ?? options.declarations ?? false,
       config.projectType === "library",
       override?.fileReplacements ?? options.fileReplacements ?? [],
+      config.sourceRoot,
     );
   }
 }

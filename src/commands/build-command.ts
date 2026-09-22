@@ -3,10 +3,9 @@ import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { BuildConfig, type BuildFlags } from "@/config/build-config.ts";
-import { templateTransform } from "@/plugins/esbuild-template-plugin.ts";
-import { NGJS_COMPILER_TRANSFORMS } from "@/plugins/ngjs-compiler-transforms.ts";
-import { pluginLoader } from "@/plugins/plugin-loader.ts";
 import * as esbuild from "esbuild";
+import { pluginLoader } from "ng-js-compiler/esbuild";
+import { templateTransform } from "ng-js-template-plugin";
 
 type Format = "esm" | "cjs";
 
@@ -43,7 +42,7 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       minify: this.config.minify,
       // sin esto esbuild escapa `ɵ` (`ɵ`) — válido pero ilegible; `ɵcmp` queda literal.
       charset: "utf8",
-      plugins: [pluginLoader([templateTransform, ...NGJS_COMPILER_TRANSFORMS], fileReplacements)],
+      plugins: [pluginLoader(this.config.sourceRoot, [templateTransform], fileReplacements)],
     });
   }
 
