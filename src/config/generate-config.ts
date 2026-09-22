@@ -14,12 +14,17 @@ export class GenerateConfig extends NgjsCommandConfig {
     public readonly sourceRoot: string,
     public readonly prefix: string,
     public readonly scoped: boolean,
+    public readonly core: boolean,
   ) {
     super();
   }
 
   static async create(flags: GenerateFlags): Promise<GenerateConfig> {
     const config = await this.read();
-    return new GenerateConfig(flags.schematic, flags.name, config.sourceRoot, config.prefix ?? "app", flags.scoped ?? false);
+
+    // Mismo campo que `cli.defaultCollection` de Angular real — ver `cli-config.ts`.
+    const core = config.cli?.defaultCollection === "ngjs-core";
+
+    return new GenerateConfig(flags.schematic, flags.name, config.sourceRoot, config.prefix ?? "app", flags.scoped ?? false, core);
   }
 }

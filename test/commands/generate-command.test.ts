@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GenerateCommand } from "@/commands/generate-command.ts";
+import type { NgjsConfig } from "@/config/cli-config.ts";
 import { GenerateConfig } from "@/config/generate-config.ts";
 import { ModuleTemplate } from "@/schematics/module-template.ts";
 
@@ -90,5 +91,70 @@ describe("GenerateCommand — registro en el módulo más cercano", () => {
     await writeFile(join(dir, "outside.module.ts"), ModuleTemplate.from("outside").toString(), "utf8");
 
     await expect(generate("component", "card")).rejects.toThrow(/No se encontró ningún módulo/);
+  });
+});
+
+describe("GenerateCommand — modo core (cli.defaultCollection en ngjs.json)", () => {
+  let dir: string;
+  let originalCwd: string;
+
+  beforeEach(async () => {
+    originalCwd = process.cwd();
+    dir = await mkdtemp(join(tmpdir(), "ngjs-generate-core-test-"));
+    process.chdir(dir);
+    await mkdir(join(dir, "src"), { recursive: true });
+  });
+
+  afterEach(async () => {
+    process.chdir(originalCwd);
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  async function writeNgjsConfig(defaultCollection: "ng-js-cli" | "ngjs-core" | undefined): Promise<void> {
+    await writeFile(
+      join(dir, "ngjs.json"),
+      JSON.stringify({
+        version: "1",
+        root: ".",
+        projectType: "application",
+        sourceRoot: "src",
+        architect: { build: { options: { entryPoints: {}, outputPath: "dist" } } },
+        cli: defaultCollection ? { defaultCollection } : undefined,
+      } satisfies NgjsConfig),
+      "utf8",
+    );
+  }
+
+  it("con cli.defaultCollection: 'ngjs-core', genera con decoradores y sin exigir un módulo donde registrar", async () => {
+    await writeNgjsConfig("ngjs-core");
+
+    await generate("component", "card");
+
+    const component = await readFile(join(dir, "src", "card.component.ts"), "utf8");
+    expect(component).toContain('import { Component } from "ngjs-core";');
+    expect(component).toContain('selector: "app-card"');
+    expect(component).not.toContain("$name");
+  });
+
+  it("con cli.defaultCollection: 'ng-js-cli' explícito, sigue en modo plano", async () => {
+    await writeNgjsConfig("ng-js-cli");
+
+    await generate("module", "app");
+    await generate("service", "user");
+
+    const service = await readFile(join(dir, "src", "user.service.ts"), "utf8");
+    expect(service).not.toContain("@Injectable");
+    expect(service).toContain("static $name");
+  });
+
+  it("sin cli.defaultCollection, sigue en modo plano por default", async () => {
+    await writeNgjsConfig(undefined);
+
+    await generate("module", "app"); // pipe en modo plano necesita un módulo donde registrarse
+    await generate("pipe", "upper");
+
+    const pipe = await readFile(join(dir, "src", "upper.pipe.ts"), "utf8");
+    expect(pipe).toContain("static $name");
+    expect(pipe).not.toContain("@Pipe");
   });
 });

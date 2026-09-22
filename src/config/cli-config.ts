@@ -15,6 +15,19 @@ export interface NgjsConfig {
     /** Solo tiene sentido para `projectType: "application"` (fase 2, dev-server con Vite + `ng-js-vite`). */
     serve?: ServeTarget;
   };
+  /** Mismo `"cli"` de `angular.json` real — hoy solo `defaultCollection`. */
+  cli?: {
+    /**
+     * Nombre de la colección de schematics que usa `generate` — mismo campo que
+     * `cli.defaultCollection` de Angular real. `"ng-js-cli"` (default, si falta)
+     * → templates planos: clases con `$name`/`ɵcmp`/`ɵdir` a mano, sin decoradores.
+     * `"ngjs-core"` → templates con los decoradores reales de `ngjs-core`
+     * (`@Component`, `@Directive`, `@Pipe`, `@NgModule`, `@Injectable`). El CLI
+     * solo estampa la metadata; el registro en el módulo (`declarations`, etc.)
+     * queda manual — `ngjs-core` es quien hace ese trabajo en runtime, no `generate`.
+     */
+    defaultCollection?: "ng-js-cli" | "ngjs-core";
+  };
 }
 
 export interface BuildTarget {

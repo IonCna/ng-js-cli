@@ -7,6 +7,8 @@ import { ServiceTemplate } from "@/schematics/service-template.ts";
 export interface SchematicContext {
   prefix: string;
   scoped: boolean;
+  /** `ngjs.json` → `schematics["*"|kind].core`, ya resuelto — ver `SchematicOptions` en `cli-config.ts`. */
+  core: boolean;
 }
 
 export type SchematicKind = "component" | "directive" | "pipe" | "service" | "module";
@@ -23,27 +25,27 @@ type Schematic = (name: string, dir: string, context: SchematicContext) => Promi
 /** Diccionario cerrado — sin soporte para schematics de terceros, esto es todo lo que hay. */
 const SCHEMATICS: Record<SchematicKind, Schematic> = {
   component: async (name, dir, ctx) => {
-    const template = ComponentTemplate.from(name, ctx.prefix);
+    const template = ComponentTemplate.from(name, ctx.prefix, ctx.core);
     await template.write(dir);
     return { kind: "component", className: template.className, fileName: `${template.fileBase}.component` };
   },
   directive: async (name, dir, ctx) => {
-    const template = DirectiveTemplate.from(name, ctx.prefix);
+    const template = DirectiveTemplate.from(name, ctx.prefix, ctx.core);
     await template.write(dir);
     return { kind: "directive", className: template.className, fileName: `${template.fileBase}.directive` };
   },
-  pipe: async (name, dir) => {
-    const template = PipeTemplate.from(name);
+  pipe: async (name, dir, ctx) => {
+    const template = PipeTemplate.from(name, ctx.core);
     await template.write(dir);
     return { kind: "pipe", className: template.className, fileName: `${template.fileBase}.pipe` };
   },
   service: async (name, dir, ctx) => {
-    const template = ServiceTemplate.from(name, ctx.scoped);
+    const template = ServiceTemplate.from(name, ctx.scoped, ctx.core);
     await template.write(dir);
     return { kind: "service", className: template.className, fileName: `${template.fileBase}.service` };
   },
-  module: async (name, dir) => {
-    const template = ModuleTemplate.from(name);
+  module: async (name, dir, ctx) => {
+    const template = ModuleTemplate.from(name, ctx.core);
     await template.write(dir);
     return { kind: "module", className: template.className, fileName: `${template.fileBase}.module` };
   },
