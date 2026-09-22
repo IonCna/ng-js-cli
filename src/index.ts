@@ -1,4 +1,5 @@
 import { buildCommandDefinition, runBuildCommand } from "@/commands/build-command.ts";
+import { configCommandDefinition, runConfigCommand } from "@/commands/config-command.ts";
 import { generateCommandDefinition, runGenerateCommand } from "@/commands/generate-command.ts";
 import { newCommandDefinition, runNewCommand } from "@/commands/new-command.ts";
 import { runServeCommand, serveCommandDefinition } from "@/commands/serve-command.ts";
@@ -31,6 +32,13 @@ program
   .alias(serveCommandDefinition.alias)
   .option("-p, --port <port>", "puerto del dev-server", Number)
   .action(runServeCommand);
+
+program
+  .command(configCommandDefinition.name)
+  .alias(configCommandDefinition.alias)
+  .argument("<path>", "path en dot-notation sobre ngjs.json, ej. architect.build.options.outputPath")
+  .argument("[value]", "si se omite, lee; si se pasa, escribe (JSON.parse con fallback a string)")
+  .action(runConfigCommand);
 
 program.parseAsync().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : error);

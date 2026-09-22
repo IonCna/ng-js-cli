@@ -42,4 +42,41 @@ describe("NewCommand", () => {
 
     await expect(NewCommand.from(NewConfig.create({})).run()).rejects.toThrow(/Ya existe "ngjs.json"/);
   });
+
+  it("setea prefix por default", async () => {
+    await NewCommand.from(NewConfig.create({})).run();
+
+    const written = JSON.parse(await readFile(join(dir, "ngjs.json"), "utf8")) as NgjsConfig;
+    expect(written.prefix).toBe("app");
+  });
+
+  it("arma configurations.production con el fileReplacements de environments", async () => {
+    await NewCommand.from(NewConfig.create({})).run();
+
+    const written = JSON.parse(await readFile(join(dir, "ngjs.json"), "utf8")) as NgjsConfig;
+    expect(written.architect.build.configurations?.production?.fileReplacements).toEqual([
+      { replace: "src/environments/environment.ts", with: "src/environments/environment.prod.ts" },
+    ]);
+  });
+
+  it("escribe src/environments/environment.ts y environment.prod.ts", async () => {
+    await NewCommand.from(NewConfig.create({})).run();
+
+    const dev = await readFile(join(dir, "src", "environments", "environment.ts"), "utf8");
+    const prod = await readFile(join(dir, "src", "environments", "environment.prod.ts"), "utf8");
+    expect(dev).toContain("production: false");
+    expect(prod).toContain("production: true");
+  });
+
+  it("agrega architect.serve solo para projectType 'application'", async () => {
+    await NewCommand.from(NewConfig.create({ projectType: "application" })).run();
+    const application = JSON.parse(await readFile(join(dir, "ngjs.json"), "utf8")) as NgjsConfig;
+    expect(application.architect.serve?.options?.port).toBe(4200);
+  });
+
+  it("no agrega architect.serve para projectType 'library'", async () => {
+    await NewCommand.from(NewConfig.create({ projectType: "library" })).run();
+    const library = JSON.parse(await readFile(join(dir, "ngjs.json"), "utf8")) as NgjsConfig;
+    expect(library.architect.serve).toBeUndefined();
+  });
 });

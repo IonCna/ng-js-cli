@@ -15,7 +15,8 @@
     "@swc/core": "^1.16.2",
     "commander": "^15.0.0",
     "esbuild": "^0.28.1",
-    "ng-js-vite": "link:ng-js-vite"
+    "ng-js-vite": "link:ng-js-vite",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
