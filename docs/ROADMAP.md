@@ -57,6 +57,12 @@ consumidor de este contrato, no al revés. Probado con tests de integración
   referencia de valor de Ivy).
 - **`declarations`**: solo component/directive/pipe (un servicio ahí es error,
   como Angular).
+- **Standalone no se va a soportar.** Todo component/directive/pipe tiene que
+  estar en `declarations` de un `@NgModule` — sin eso, `ApplicationScanner`
+  nunca lo ve y no se registra, ni es un caso a cubrir más adelante. Angular
+  16.2 (el techo de arriba) es la última versión antes de que standalone sea
+  default; migrar hacia standalone queda del lado de `ng update` de Angular
+  real, después de `migrate`, no de este compilador.
 - **`providers` de `@NgModule`**: clase, `{ provide }`, `useClass`, `useValue`,
   `useFactory` + `deps`, `useExisting`, `multi`, arrays anidados. Último gana;
   mezclar multi/no-multi es error; lo que no se puede leer en build
@@ -86,16 +92,9 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `--skip-import` no registra. Service no se registra en ningún módulo: se
       genera con `@Injectable({ providedIn: "root" })`.
 - [ ] **Cobertura del compilador — lo que falta:**
-  - `providers` de `@Component`/`@Directive`: se leen pero no se emiten
-    (jerárquicos).
-  - Componentes standalone (sin `@NgModule` que los declare) nunca se registran.
   - Selectores compuestos (`button[foo]`, `a, b`): `ɵcmp`/`ɵdir` ya los estampan,
     pero `ModuleWriter`/`SelectorParser` solo registran tag simple o
     `[atributo]` simple.
-  - `@HostBinding`/`@HostListener` se leen (`DecoratorReader`) pero no se
-    traducen a nada funcional.
-  - Lifecycle hooks (`ngOnInit`, etc.) no se traducen a `$onInit`/etc. de
-    AngularJS.
   - `APP_INITIALIZER` / NgZone en `bootstrapModule`.
   - `ModuleWithProviders` (`forRoot()`/`forChild()`) en `imports`.
   - Sin DI avanzada (`inject()`, Router, Forms, HttpClient, RxJS) — fuera de
@@ -121,6 +120,124 @@ consumidor de este contrato, no al revés. Probado con tests de integración
 - `--configuration staging,es-MX` aplica cada configuration en orden sobre
   `options` (la última pisa), como Angular real (`BuildConfig.mergeConfigurations`).
   Un nombre que no existe en `configurations` es error, también como Angular real.
+
+## ✅ `@HostBinding`/`@HostListener` funcionales
+
+`DecoratorReader` ya leía ambos pero no se traducían a nada — ahora `HostWiring`
+(`plugins/ng-js-compiler/src/compiler/host-wiring.ts`) arma el wiring real en el
+`ɵfac` de la clase, sin tocar el caso común (una clase sin ninguno de los dos
+sigue con el factory de siempre):
+
+- El factory de TODO `@Component`/`@Directive` inyecta `$element`/`$scope` extra
+  y envuelve la instancia: `var instance = new X(...); <wiring>; return instance;`
+  — siempre, tenga o no la clase `@HostBinding`/`@HostListener`/lifecycle hooks.
+  Es gratis (`$compile` ya arma `$element`/`$scope` en `locals` para cualquier
+  controller, se pidan o no) y evita tener que detectar de antemano qué necesita
+  cada feature que cuelgue de ahí (ver también "Lifecycle hooks" más abajo).
+- `@HostBinding`: un `$scope.$watch` por binding, aplicado como Angular real
+  (recién en el primer digest, no al construir) — mismo mecanismo que ya usa
+  `@Input`. Soporta `class.X`, `attr.X` (semántica de `null`/`false`/`true`),
+  `style.X`/`style.X.unit` y propiedad DOM plana (`$element.prop`).
+- `@HostListener`: `$element.on(evento, handler)`; el segundo argumento
+  (`['$event', '$event.target']`) se lee y valida en `DecoratorReader` — solo
+  `$event`/`$event.algo`, cualquier otra cosa es error en build. El handler
+  corre con "safe apply" (chequea `$scope.$root.$$phase` antes de
+  `$scope.$apply()`, para no chocar con un digest ya en curso).
+- `$scope.$on("$destroy", ...)` desregistra todos los `$watch` y saca todos los
+  `$element.on` — nada queda colgado después de destruir el scope.
+
+Cubierto con test unitario (`decorator-writer.test.ts`, mocks de
+`$element`/`$scope`) y de integración (`angularjs.test.ts`, AngularJS real +
+jsdom: click nativo, digest automático, limpieza en `$destroy`).
+
+## ✅ `providers` de `@Component`/`@Directive` (injector jerárquico por elemento)
+
+Se leían (`DecoratorReader`) pero no se emitían — ahora tienen efecto real, aislado
+por instancia, no una registración global disfrazada. Nueva pieza,
+`plugins/ng-js-compiler/src/compiler/scoped-injector-runtime.ts` +
+`scoped-providers.ts`, portando la idea de `ElementInjectorNode`/
+`scoped-injector-bridge.ts` de `ngjs-core` — pero sin importar nada de ahí (sigue
+"sin runtime propio"): el compilador estampa su propia versión, más simple.
+
+- **`ScopedProviders`**: `ClassName.ɵfac.ɵproviders = [...]` — recetas ya
+  resueltas en build (mismo shape que `ModuleWriter.providerCall` usa para
+  `@NgModule`), colgadas del MISMO array que ya es `controller:` en
+  `ModuleWriter` (`X.ɵfac`) — así el runtime las lee de `expression.ɵproviders`
+  sin necesitar un registro de clases por selector/tagName.
+- **`ScopedInjectorRuntime`**: una versión chica de `ElementInjectorNode`
+  (mapa de singles/multis, `resolve()` sube al padre, cae al `$injector` de la
+  app si no hay nada) + un `.decorator("$controller", ...)` que intercepta la
+  construcción de CUALQUIER controller, ancla el nodo al elemento vía jqLite
+  `$element.data()`/`inheritedData()`, y resuelve el `$inject` de la clase
+  contra la cadena de nodos en vez del `$injector` plano. Se estampa como texto
+  plano (funciones a nivel de módulo, sin `globalThis`) una sola vez, en el
+  archivo del `@NgModule` raíz (el que tiene `bootstrap`) — y **nada** si
+  ningún component/directive del proyecto declaró `providers` propios
+  (`ApplicationScanner.hasScopedProviders()`, chequeado por `ModuleWriter`).
+- **Limpieza**: `$scope.$on("$destroy", ...)` por nodo, mismo patrón que
+  `HostWiring`.
+- **Alcance de esta vuelta** (decisión explícita, no pendiente):
+  - Sin "entornos" de rama lazy (`ngjs-core` los soporta para `loadChildren`
+    vía UI-Router) — coincide con que `forRoot()`/`ModuleWithProviders` ya es
+    error en build en este compilador.
+  - Sin flags de DI (`@Optional`/`@Self`/`@SkipSelf`/`@Host`) — `DecoratorReader`
+    no los lee todavía.
+  - Sin `registerInstance` (inyectar una directiva/componente ancestro como
+    token, `inject(OtroComponente)`) — capability aparte, no pedida acá.
+  - `ngOnDestroy` de las instancias del nodo no se llama (depende de que los
+    lifecycle hooks estén traducidos, ítem aparte de este roadmap).
+- **Nota de diseño**: "¿es este el módulo raíz?" se decide con
+  `bootstrap.length > 0` — coincide con el único caso real (`platformBrowserDynamic().bootstrapModule()`
+  exige `bootstrap` para montar algo), pero un test/app que llame
+  `angular.bootstrap()` a mano sin declarar `bootstrap` en su `@NgModule` no
+  activa el injector jerárquico aunque tenga `providers` — hay que declarar
+  `bootstrap: [...]` igual que en producción.
+
+Cubierto con tests unitarios (`scoped-providers.test.ts`,
+`scoped-injector-runtime.test.ts` con el runtime evaluado en aislado,
+`module-writer.test.ts` para el gate de "cuándo se estampa") y de integración
+(`angularjs.test.ts`, AngularJS real + jsdom: dos `<app-widget>` hermanos con
+`providers: [Logger]` reciben cada uno su propia instancia, y un hijo anidado
+sin providers propios hereda la del padre).
+
+## ✅ Lifecycle hooks (`ngOnInit`, `ngOnChanges`, etc.)
+
+Se detectan por NOMBRE de método (no son decoradores — `LifecycleWiring`,
+`plugins/ng-js-compiler/src/compiler/lifecycle-wiring.ts`), y se traducen a los
+5 hooks nativos de un controller de AngularJS (`$onChanges`/`$onInit`/`$doCheck`/
+`$postLink`/`$onDestroy`) con un método de `prototype` puente — el código de la
+clase no se toca, `ngOnInit`/etc. quedan 100% Angular real, listos para
+`migrate`.
+
+- **Rename directo**: `ngOnInit`→`$onInit`, `ngOnDestroy`→`$onDestroy`.
+- **`ngOnChanges`→`$onChanges`**: adaptador de forma — AngularJS entrega
+  `changesObj` por **bindingName** con `isFirstChange()` como único método;
+  se traduce a un objeto por **propName** (como Angular real) con
+  `firstChange` como propiedad **y** `isFirstChange()` como método (las dos
+  formas de leerlo en Angular real, para que el código no cambie al migrar).
+- **`ngAfterContentInit`/`ngAfterViewInit`→`$postLink`**: aproximado —
+  AngularJS no separa contenido de vista, `$postLink` corre una sola vez
+  después de linkear (con el contenido transcluido ya adentro). Si la clase
+  tiene los dos, se llaman en el orden real de Angular (contenido antes que
+  vista).
+- **`ngAfterContentChecked`/`ngAfterViewChecked`→`$doCheck`**: sin contraparte
+  real, así que se disparan desde `$doCheck` (el único hook nativo que corre
+  en cada digest) — **sincrónico**, nunca con `$scope.$evalAsync`. Se probó la
+  versión con `$evalAsync` (para diferenciar el timing de `ngDoCheck`) y
+  produce `"$digest() iterations reached. Aborting!"` real: `$doCheck` corre
+  una vez por cada PASADA INTERNA del loop de `$digest` (no una vez por
+  digest lógico), así que encolar algo en `$evalAsync` desde ahí deja la cola
+  async no vacía para siempre y el digest nunca estabiliza.
+- **`$element`/`$scope` siempre disponibles**: como consecuencia de esto, se
+  generalizó `DecoratorWriter.facStatement` — TODO `@Component`/`@Directive`
+  inyecta `$element`/`$scope` en su factory ahora (antes era condicional a
+  `HostWiring.hasAny()`), ver nota arriba en "Host bindings".
+
+Cubierto con tests unitarios (`lifecycle-wiring.test.ts`, cada hook evaluado en
+aislado) y de integración (`angularjs.test.ts`, AngularJS real + jsdom:
+`$onChanges` en el primer y segundo digest con valores reales, orden
+`onChanges`→`onInit`→`doCheck` en el arranque, `$postLink` una sola vez,
+`$onDestroy` real al destruir el scope).
 
 ## ⬜ Parecido a Angular CLI — housekeeping, prioridad baja
 
