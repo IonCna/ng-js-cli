@@ -48,13 +48,75 @@ consumidor de este contrato, no al revés. Probado con tests de integración
   array de AngularJS y nombres de DI ya resueltos), `ɵprov` (`{ token, providedIn? }`),
   `ɵcmp`/`ɵdir` (`selectors`, `inputs`/`outputs`, `exportAs` con la forma de Ivy),
   `ɵpipe` (`{ name, pure }`), `ɵmod` (`{ id, bootstrap? }`, lo estampa
-  `ModuleWriter`). Sin `$name`/`$inject`/`design:paramtypes`.
+  `ModuleWriter`). Sin `$name`/`$inject`/`design:paramtypes`. Un
+  `const X = new InjectionToken(...)` de nivel de archivo lleva `X.ɵprov =
+  { token }` (`InjectionTokenWriter`) — mismo nombre que `TokenName` en cada uso,
+  para cuando el token llega como valor en runtime.
 - **Nombres de DI en build** (`TokenName`): `HashId.readable(símbolo exportado,
   paquete)`, resuelto por el import de cada archivo — sirve igual para clases e
   `InjectionToken`. Parámetro de constructor sin tipo ni `@Inject()` y dos
   clases con el mismo nombre en el proyecto son error en build. Cada dependencia
   del constructor deja un import de efecto de su archivo (equivalente a la
   referencia de valor de Ivy).
+- **Flags de DI** (`ResolveDependency`): `@Optional()`/`@Self()`/`@SkipSelf()`/
+  `@Host()` en el constructor, `inject(X, { optional, self, skipSelf, host })` y
+  `[new Optional(), new Self(), X]` en `deps`. La dependencia se pide como
+  `ɵresolve` (`(token, flags) → instancia | null`) y el factory le pasa token y
+  flags; cada `@NgModule` lo registra si algo del proyecto lleva flags (y la
+  plataforma siempre). En el injector por elemento (semántica de
+  `ElementInjectorNode` de ngjs-core): `self` = solo el nodo propio, `skipSelf` =
+  desde el padre. `host` como Angular (no como ngjs-core): sube por los nodos
+  mientras su elemento esté dentro del host — el `$element` del componente dueño
+  de la vista (un componente es su propio host; cada uno se marca en su
+  elemento) — y no consulta la app. Sin injector de elemento, `self`/`host` en
+  un componente/directiva no encuentran nada propio. Acepta `foo: Foo | null`
+  como token.
+- **`inject()` durante la construcción** (campo de instancia o cuerpo del
+  constructor): se reemplaza en build por `globalThis.ɵngjsInjected["Clase"][i]`
+  (`InjectedValues`) y el token entra al `ɵfac` como una dependencia más; el
+  factory expone esos valores solo mientras corre el `new`, agrupados por la
+  clase que declara el `inject()` (así funciona entre base y subclase en
+  archivos distintos). Un `inject()` dentro de una función anidada (callback,
+  método, arrow de un campo) o en un campo `static` no corre en la construcción:
+  queda intacto para el `inject()` de runtime de quien ejecute esa función.
+- **Inyectar una directiva/componente** (`ElementInstances`, la versión de build
+  de `registerInstance` + el fallback `$element.controller()` + los controller
+  tokens de ngjs-core): en build se sabe qué tokens son clases elemento del
+  proyecto (también sus bases) y con qué nombre las registra AngularJS; esa dep
+  no pasa por DI, el `ɵfac` la lee de `$element` (`$<nombre>Controller`, lo que
+  usa `require`) con los flags: sin flags = elemento y ancestros, `self`,
+  `skipSelf`, `host` = hasta el componente host, `optional`.
+- **Queries y `hostDirectives`: solo la definición**, como Ivy
+  (`ɵɵngDeclareComponent`): `@ViewChild`/`@ViewChildren` → `ɵcmp.viewQueries`,
+  `@ContentChild`/`@ContentChildren` → `ɵcmp.queries` (`{ propertyName, first,
+  descendants, static, predicate, read? }`; `predicate` = clase o nombres de
+  `#ref`), `hostDirectives` → `{ directive, inputs?, outputs? }`. Las clases van
+  como getters (se resuelven al leerse: sirve con `forwardRef`/imports
+  circulares), se heredan de la base y el decorador sale del código. Resolverlas
+  (`QueryList`) y aplicar las `hostDirectives` es del runtime.
+- **Herencia** (`ClassHierarchy`, la versión de compilación de
+  `collectMetadata` de ngjs-core): entre clases decoradas del proyecto, una
+  subclase sin `constructor` usa el de su ancestro más cercano (factory heredado
+  de Ivy); los `inject()` de construcción de toda la cadena; en elementos,
+  inputs/outputs/host y lifecycle de los ancestros (el hijo pisa). La base
+  abstracta lleva `@Directive()` sin selector (no se declara en ningún módulo) o
+  `@Injectable()`; una clase sin decorador que usa features de Angular es error
+  en build, y una subclase sin decorador provista con DI heredada es error al
+  registrar — como Angular desde v10.
+- **Factories con `deps`** (`FactoryCode`, compartido por `@NgModule`,
+  `@Component` y `ɵprov.factory`): flags en `deps` y los `inject()` del cuerpo
+  de un `useFactory` (arrow/función literal) se resuelven como en una clase.
+- **`@Injectable` con receta** (`useClass`/`useValue`/`useFactory`/`useExisting`
+  + `deps`): `ɵprov.factory`, como Ivy — lo usa la clase cuando se provee sola
+  (`providers: [X]`, `providedIn: "root"`, `ModuleWithProviders`); `useClass`
+  sin `deps` se resuelve al llamar (sirve con `forwardRef` y subclases).
+- **`InjectionToken` con `factory`**: se provee solo (`providedIn: "root"`, el
+  default) con `ɵprov.factory` y sus `inject()` resueltos en build;
+  `providedIn: "any"`/`"platform"` son error en build.
+- **`@Attribute("x")`** en `@Component`/`@Directive`: el atributo estático del
+  host (`$element`); en otra clase es error en build.
+- **`forwardRef(() => X)`** en `providers`, `deps`, `useClass`, `@Inject()` e
+  `inject()`: se desenvuelve en build.
 - **`declarations`**: solo component/directive/pipe (un servicio ahí es error,
   como Angular).
 - **Standalone no se va a soportar.** Todo component/directive/pipe tiene que
@@ -65,12 +127,23 @@ consumidor de este contrato, no al revés. Probado con tests de integración
   real, después de `migrate`, no de este compilador.
 - **`providers` de `@NgModule`**: clase, `{ provide }`, `useClass`, `useValue`,
   `useFactory` + `deps`, `useExisting`, `multi`, arrays anidados. Último gana;
-  mezclar multi/no-multi es error; lo que no se puede leer en build
+  mezclar multi/no-multi es error (también entre módulos); los `multi` se juntan
+  entre todos los módulos de la app (`MultiProvidersRuntime`: aporte con nombre
+  único por módulo + `.config` que acumula), en el orden de Angular: importados →
+  `ModuleWithProviders` → propios; lo que no se puede leer en build
   (`...spread`, `provideX()`, variable) es error, nunca se descarta.
 - **`imports` de `@NgModule`**: `@NgModule` propio (`X.ɵmod.id`, por referencia
   para que el archivo se evalúe), de otro paquete compilado con ngjs (`ɵmod.id`),
   `angular.IModule` legacy (`.name`) y módulos por nombre (`"ngAnimate"`).
-  `forRoot()`/`ModuleWithProviders` es error por ahora.
+- **`ModuleWithProviders`** (`ModuleWithProvidersRuntime`): cualquier llamada en
+  `imports` (`ConfigModule.forRoot(options)`) se evalúa una vez al correr y se
+  mira la forma del resultado, no el nombre del método (como
+  `isModuleWithProviders` de Angular). Con `ngModule`: entra a los `requires` y
+  sus `providers` se registran en el `angular.module` que lo importa, antes que
+  los propios (el propio gana). Sin `ngModule`: un módulo más. Tokens en
+  runtime: string, clase con `@Injectable` o `InjectionToken` (su `ɵprov.token`).
+  Una clase usada como token (ej. abstracta) tiene que llevar `@Injectable()`
+  (válido en Angular real); sin eso es error al correr que dice qué agregar.
 - **Plataforma** (`PlatformCode`): el build deja `globalThis.ɵngjsPlatform =
   { bootstrapModule }` al inicio (esbuild: `banner`; Vite: `<script>` en el
   HTML), solo con `projectType: "application"`. `bootstrapModule(AppModule)` arma
@@ -93,13 +166,29 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `--skip-import` no registra. Service no se registra en ningún módulo: se
       genera con `@Injectable({ providedIn: "root" })`.
 - [ ] **Cobertura del compilador — lo que falta:**
-  - `ModuleWithProviders` (`forRoot()`/`forChild()`) en `imports`.
-  - Sin DI avanzada (`inject()`, Router, Forms, HttpClient, RxJS) — fuera de
-    alcance del compilador tal como está pensado.
+  - DI: herencia desde una base de OTRO paquete (no está en el escaneo del
+    proyecto) no se resuelve en build. Inyectar una directiva/componente del
+    MISMO elemento que se construye después (orden de controllers de AngularJS)
+    da la instancia a medio armar.
 - [ ] **`ngjs-core` como consumidor del contrato del compilado** (rebuild
-      pendiente): su `platformBrowserDynamic` tiene que ser la puerta
-      (`() => globalThis.ɵngjsPlatform`), y dejar de resolver en runtime lo que
-      ahora resuelve el compilador.
+      pendiente). Criterio: el compilador resuelve lo que es dato de build o
+      primitiva de AngularJS; lo que produce un objeto de librería o tiene
+      comportamiento en cada ciclo es del runtime.
+  - Puerta: `platformBrowserDynamic` = `() => globalThis.ɵngjsPlatform`.
+  - Proveer, con el nombre de DI que emite el compilador (`TokenName` del
+    símbolo exportado), los tokens de librería que el compilado pide como
+    dependencia común: `ElementRef`, `ChangeDetectorRef`, `DestroyRef`,
+    `ViewContainerRef`/`TemplateRef`, `Injector`, …
+  - Leer lo estampado en vez de los decoradores (ya no corren):
+    `ɵcmp.queries`/`viewQueries` (resolver, `QueryList`), `hostDirectives`,
+    `outputs` (conectar `EventEmitter` → binding `&`), `exportAs` (`#ref`).
+  - Dejar de resolver en runtime lo que ya resuelve el compilado: DI por nombre
+    (`ɵfac`), flags (`ɵresolve`), `inject()` de construcción, herencia de
+    metadata, providers de componente (injector por elemento), instancias de
+    directiva/componente inyectadas, `@Attribute`, `forwardRef`,
+    `ModuleWithProviders`, multi-providers.
+  - Comportamiento que sigue siendo de runtime: `<ng-content>`, orden de inputs
+    vs constructor, forms (CVA, validators, `disabled`), `async` pipe, router.
 - [x] **Más schematics.** `generate` cubre component/directive/pipe/service/module +
       class/interface/enum (TS plano) + guard/resolver (funcionales, `CanActivateFn`/
       `ResolveFn` de `ngjs-core/router`) + interceptor (clase, `implements
@@ -175,8 +264,7 @@ por instancia, no una registración global disfrazada. Nueva pieza,
   `HostWiring`.
 - **Alcance de esta vuelta** (decisión explícita, no pendiente):
   - Sin "entornos" de rama lazy (`ngjs-core` los soporta para `loadChildren`
-    vía UI-Router) — coincide con que `forRoot()`/`ModuleWithProviders` ya es
-    error en build en este compilador.
+    vía UI-Router).
   - Sin flags de DI (`@Optional`/`@Self`/`@SkipSelf`/`@Host`) — `DecoratorReader`
     no los lee todavía.
   - Sin `registerInstance` (inyectar una directiva/componente ancestro como
