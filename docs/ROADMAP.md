@@ -92,9 +92,6 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `--skip-import` no registra. Service no se registra en ningún módulo: se
       genera con `@Injectable({ providedIn: "root" })`.
 - [ ] **Cobertura del compilador — lo que falta:**
-  - Selectores compuestos (`button[foo]`, `a, b`): `ɵcmp`/`ɵdir` ya los estampan,
-    pero `ModuleWriter`/`SelectorParser` solo registran tag simple o
-    `[atributo]` simple.
   - `APP_INITIALIZER` / NgZone en `bootstrapModule`.
   - `ModuleWithProviders` (`forRoot()`/`forChild()`) en `imports`.
   - Sin DI avanzada (`inject()`, Router, Forms, HttpClient, RxJS) — fuera de
@@ -238,6 +235,77 @@ aislado) y de integración (`angularjs.test.ts`, AngularJS real + jsdom:
 `$onChanges` en el primer y segundo digest con valores reales, orden
 `onChanges`→`onInit`→`doCheck` en el arranque, `$postLink` una sola vez,
 `$onDestroy` real al destruir el scope).
+
+## ✅ Selector compuesto `tag[atributo]` (`button[ngbButtonLabel]`)
+
+AngularJS no sabe matchear "esta directiva solo si el tag es X" a nivel de
+registro — `.directive(nombre, factory)` matchea por nombre solo, y el
+`controller` declarado en la definición se instancia siempre que matcheó, sin
+importar qué devuelva `compile`/`link` (`terminal`/`compile` tampoco sirven
+para esto: paran otras directivas del mismo elemento o directivas de menor
+prioridad, no evitan que ESTA se instancie).
+
+La solución real: `SelectorParser.parse` ahora reconoce `tag[atributo]` — se
+registra bajo el ATRIBUTO (`requiredTag` queda como dato extra) — y
+`DecoratorWriter.tagGuardStatement` arma un guard adentro del mismo factory
+envuelto que ya usa `HostWiring` (`$element` siempre disponible, ver ✅ arriba):
+
+```js
+if ($element[0].tagName.toLowerCase() !== "button") {
+  console.warn("X: este selector requiere <button>, no se aplica en <" + $element[0].tagName.toLowerCase() + ">.");
+  return {};
+}
+```
+
+Como el factory (no la clase) es lo que AngularJS invoca para construir, y usa
+lo que el factory DEVUELVE como instancia real (`$injector.instantiate`), esto
+evita que el constructor de la clase real corra en el tag equivocado — sin
+reimplementar `bindToController` a mano. Limitación real y documentada:
+`bindToController` sigue posando los bindings sobre el objeto vacío devuelto
+(inofensivo, nadie los lee).
+
+Sin valor (`tag[attr=value]`) — queda afuera de este alcance.
+
+Cubierto con tests unitarios (`selector-parser.test.ts`, `decorator-writer.test.ts`)
+y de integración (`angularjs.test.ts`: un `<button>` con el atributo activa la
+clase real, un `<label>` con el mismo atributo queda inerte sin romper el
+resto de la página).
+
+## ✅ Listas de selector por coma (`"[foo], [bar]"`)
+
+`SelectorParser.parse` ahora devuelve un ARRAY (una entrada por alternativa,
+separadas por coma) en vez de un selector único — `ɵcmp`/`ɵdir` ya las
+estampaban (Ivy, `ivySelectors` en `defStatement`), esto era lo que faltaba
+del lado de `ModuleWriter` (a dónde se registra).
+
+- `ModuleWriter.componentCall`/`directiveCall` registran una vez por
+  alternativa (`.component()`/`.directive()` con el mismo `controller`/
+  `bindings`, solo cambia el nombre) — pero DEDUPLICADAS por
+  `registrationName` primero: dos alternativas del mismo atributo con
+  distinto tag (`"button[x], label[x]"`) comparten nombre de registro, y
+  registrar dos veces bajo el mismo nombre hace que AngularJS tire
+  `$compile:multidir` (dos directivas pidiendo el mismo `controllerAs` en el
+  mismo elemento) — bug real, se vio correr en el test de integración antes
+  de agregar el dedupe.
+- **Validar ANTES de deduplicar, no después**: si dos alternativas comparten
+  nombre y una es inválida (ej. `"app-card, [appCard]"` para un `@Component`),
+  deduplicar primero taparía la inválida con la válida y el error nunca
+  saldría. `componentCall` valida las alternativas completas, después
+  deduplica para emitir.
+- El guard de tag de `DecoratorWriter.tagGuardStatement` (ver ítem anterior)
+  ya sabía aceptar la UNIÓN de tags de todas las alternativas que comparten
+  `ɵfac` — sin cambios ahí, solo hacía falta que `ModuleWriter` dejara de
+  chocar con AngularJS al registrar.
+- Alternativa inválida en la lista: el error señala esa alternativa puntual
+  (`SelectorParser` parsea cada parte por separado, el mensaje de error usa
+  el texto de la parte que falló, no la lista completa).
+
+Sin `tag[attr=value]` — mismo límite que el ítem anterior.
+
+Cubierto con tests unitarios (`selector-parser.test.ts`, `decorator-writer.test.ts`,
+`module-writer.test.ts` — incluye el caso de dedupe) y de integración
+(`angularjs.test.ts`: `"button[x], label[x]"` activa la misma clase en
+cualquiera de los dos tags, sin `$compile:multidir`).
 
 ## ⬜ Parecido a Angular CLI — housekeeping, prioridad baja
 
