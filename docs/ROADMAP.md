@@ -77,7 +77,8 @@ consumidor de este contrato, no al revés. Probado con tests de integración
   el módulo raíz: `ɵroot.providers` (los `providedIn: "root"`, que se anotan en
   una cola global al evaluarse) antes que el módulo arrancado, así un provider del
   `@NgModule` pisa al root como en Angular; monta los componentes de `bootstrap`
-  y hace `angular.bootstrap`. Sin NgZone ni `APP_INITIALIZER`.
+  y hace `angular.bootstrap`. `ZonePatchesRuntime` (ver "✅ Patches globales"
+  más abajo) se estampa acá también.
 - **`angular`** lo importa el compilado (`import ɵangular from "angular"` en cada
   archivo con `@NgModule`): va dentro del bundle salvo que `ngjs.json` lo liste en
   `external`. `angular@1.8.3` es `peerDependency` de `ng-js-compiler`.
@@ -92,7 +93,6 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `--skip-import` no registra. Service no se registra en ningún módulo: se
       genera con `@Injectable({ providedIn: "root" })`.
 - [ ] **Cobertura del compilador — lo que falta:**
-  - `APP_INITIALIZER` / NgZone en `bootstrapModule`.
   - `ModuleWithProviders` (`forRoot()`/`forChild()`) en `imports`.
   - Sin DI avanzada (`inject()`, Router, Forms, HttpClient, RxJS) — fuera de
     alcance del compilador tal como está pensado.
@@ -306,6 +306,53 @@ Cubierto con tests unitarios (`selector-parser.test.ts`, `decorator-writer.test.
 `module-writer.test.ts` — incluye el caso de dedupe) y de integración
 (`angularjs.test.ts`: `"button[x], label[x]"` activa la misma clase en
 cualquiera de los dos tags, sin `$compile:multidir`).
+
+## ✅ Patches globales para digest automático (sin `NgZone`, sin Zone.js real)
+
+"Zone.js dispara `$digest`. No hay OnPush, ni CD por componente, ni scheduler
+propio" — esto acerca el comportamiento a Angular real para los casos que
+importan de verdad, con monkey-patches puntuales en vez de la maquinaria
+completa de Zone.js (fetch/XHR/MutationObserver/WebSocket siguen quedando
+afuera, a propósito).
+
+**Este compilador no define ninguna clase `NgZone`.** Solo le importa que el
+lado async del navegador dispare un digest — quién lo consuma (una clase con
+ese nombre, o directamente el código del dev) es indistinto acá.
+
+`plugins/ng-js-compiler/src/compiler/zone-patches-runtime.ts`
+(`ZonePatchesRuntime`), estampado junto a `PlatformCode` (mismo gate:
+`projectType: "application"`) — solo los patches globales, nada de clases:
+
+- **`setTimeout`/`setInterval` nativos** y **`addEventListener` nativo** —
+  disparan `$apply` (con el mismo "safe apply" que ya usa `HostWiring")
+  DESPUÉS de que corrió el callback del dev. `removeEventListener` va
+  parcheado EN PAREJA (`WeakMap` listener→wrapper) para que sacar un listener
+  agregado en `ngOnInit` siga funcionando; sin esto, `remove` compararía
+  contra el wrapper interno, no el original, y el listener nunca se sacaría
+  de verdad (memory leak / zombie).
+- **`Promise.prototype.then`**: cubre cadenas `.then()` explícitas, pero
+  **no** `async/await` — se probó en el motor real (Node/V8 actual) y el
+  patch da CERO intercepciones en `await` (optimización interna de V8, no
+  hay vuelta con un patch de runtime nomás).
+- **La vuelta real para `async/await`**: como somos compilador (no solo
+  runtime), el build fuerza `target: "es2016"` en esbuild (`pluginLoader`) y
+  en Vite (`viteTransformPlugin`, hook `config()`) — a ese target, esbuild
+  baja `async/await` a un helper basado en generadores (`__async`) que SÍ
+  llama `Promise.resolve(...).then(...)` por debajo (confirmado con esbuild
+  real, no solo SWC) — así el patch los agarra igual, indirectamente. Si el
+  proyecto ya pide un `target` propio (o `esbuild: false` en Vite), se
+  respeta tal cual — no se pisa una elección explícita.
+- `globalThis.ɵngjsRootScope` (lo deja `PlatformCode.bootstrapModule()`
+  cuando el bootstrap real corrió) es lo único que necesitan los patches
+  para saber a qué scope aplicarle `$apply` — sin runtime propio de por
+  medio.
+
+Cubierto con tests unitarios (`zone-patches-runtime.test.ts`, cada patch
+probado en aislado con una ventana `jsdom` fresca; `vite-transform-plugin.test.ts`
+para el hook `config()`) y de integración (`angularjs.test.ts`: `async/await`
+REAL de punta a punta — no un `.then()` escrito a mano —, `setTimeout` y un
+`addEventListener` nativo actualizan la vista solos, sin llamar
+`$digest`/`$apply` a mano en ningún lado).
 
 ## ⬜ Parecido a Angular CLI — housekeeping, prioridad baja
 
