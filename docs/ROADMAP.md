@@ -174,6 +174,11 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       pendiente). Criterio: el compilador resuelve lo que es dato de build o
       primitiva de AngularJS; lo que produce un objeto de librería o tiene
       comportamiento en cada ciclo es del runtime.
+  - Tipos del contrato: `ng-js-cli/contract` (solo tipos: estampados `ɵfac`/
+    `ɵprov`/`ɵcmp`/`ɵdir`/`ɵpipe`/`ɵmod`, nombres de DI y claves, globales). El
+    runtime importa de ahí y no sabe del compilador; la fuente es
+    `ng-js-compiler/src/contract/compiled-contract.ts` (subpath de solo tipos
+    `ng-js-compiler/contract`, que solo consume el CLI).
   - Puerta: `platformBrowserDynamic` = `() => globalThis.ɵngjsPlatform`.
   - Proveer, con el nombre de DI que emite el compilador (`TokenName` del
     símbolo exportado), los tokens de librería que el compilado pide como
