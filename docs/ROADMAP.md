@@ -7,8 +7,13 @@ Leyenda: ✅ cerrado · 🚧 en progreso · ⬜ no empezado.
 `ng-js-cli` no es decoración permanente de AngularJS — el punto final es un comando
 `migrate` que ejecuta el salto real: toma lo que ya está escrito con sintaxis de
 Angular real (decoradores), desinstala `ngb-js`/todo lo puente, e instala Angular
-real (14/16). Cuando ese comando exista y corra, la migración terminó: no queda
+real. Cuando ese comando exista y corra, la migración terminó: no queda
 reescritura pendiente, solo el swap de paquetes.
+
+**Techo: Angular 16.2 sin signals.** Es el contrato de qué API emula ngjs y el
+destino de `migrate`; de ahí en adelante es `ng update` de Angular. Lo que está
+arriba del techo (signals, control flow `@if`/`@for`, `@defer`, `@Service` de
+Angular 22) no entra.
 
 **Consecuencia para priorizar todo lo demás:** lo que acerca a `migrate` (cobertura
 del compilador, fidelidad `ngjs.json` ↔ `angular.json`) importa más que pulir el
@@ -18,50 +23,87 @@ usuario.
 
 ## ✅ Separación de responsabilidades entre repos
 
-Cerrado en esta sesión — ver [[project_ngjs_repo_responsibilities]]:
+Ver [[project_ngjs_repo_responsibilities]]:
 
 - **`ng-js-cli`** — orquestador puro: `new`/`generate`/`build`/`serve`/`config`.
   Sin decoradores ni template scoping adentro.
 - **`plugins/ng-js-compiler`** — el compilador de verdad: `@Component`/`@Directive`/
-  `@Pipe`/`@Injectable`/`@NgModule` → AngularJS nativo y final (`angular.module(id,
-  imports).component()/.directive()/.filter()/.service()`), texto literal, sin
-  runtime propio. `ApplicationScanner` hace la resolución en DOS pasadas (lee todo
-  el proyecto antes de emitir nada) para poder resolver `declarations`/`imports`
-  de un `@NgModule` sin importar en qué archivo vive cada clase ni el orden de
-  compilación. Expone `.` (core, agnóstico de build tool), `/esbuild`, `/vite`.
-- **`plugins/ng-js-vite`** — reestructurado: sin `.` ni `./core` genéricos, expone
-  `/vite` (el plugin de Vite) y `/esbuild` (scoping de template para `ng-js-cli`
-  build — antes era el paquete aparte `ng-js-template-plugin`, ahora fusionado
-  acá). Ninguno de los dos depende del otro paquete por tipos que no necesita.
+  `@Pipe`/`@Injectable`/`@NgModule` → AngularJS nativo y final, texto literal.
+  `ApplicationScanner` hace la resolución en DOS pasadas (lee todo el proyecto
+  antes de emitir nada). Expone `.`, `/esbuild`, `/vite`. Ver "Compilador sin
+  runtime" abajo.
+- **`plugins/ng-js-vite`** — expone `/vite` (el plugin de Vite) y `/esbuild`
+  (scoping de template / `templateUrl` para `ng-js-cli` build).
 - **Modo "sin core" eliminado.** `generate` tiene una sola salida (decoradores
-  reales) — no hay más `cli.defaultCollection` que elegir. Se cayó con esto:
-  `ModuleRegistrar` (registro por chain-calls de AngularJS, texto sobre
-  `ɵmod`/`ɵcmp` a mano) y el flag `--scoped` (ya estaba muerto en los dos modos).
+  reales).
+
+## ✅ Compilador sin runtime
+
+El compilado corre sobre AngularJS 1.8.3 solo — no lee nada de `ngjs-core` en
+runtime; lo único que lee es lo que el propio compilador estampa. `ngjs-core` es
+consumidor de este contrato, no al revés. Probado con tests de integración
+(esbuild + jsdom + AngularJS real, sin nada más cargado).
+
+- **Estampado estilo Ivy** (`DecoratorWriter`): `ɵfac` (factory con anotación en
+  array de AngularJS y nombres de DI ya resueltos), `ɵprov` (`{ token, providedIn? }`),
+  `ɵcmp`/`ɵdir` (`selectors`, `inputs`/`outputs`, `exportAs` con la forma de Ivy),
+  `ɵpipe` (`{ name, pure }`), `ɵmod` (`{ id, bootstrap? }`, lo estampa
+  `ModuleWriter`). Sin `$name`/`$inject`/`design:paramtypes`.
+- **Nombres de DI en build** (`TokenName`): `HashId.readable(símbolo exportado,
+  paquete)`, resuelto por el import de cada archivo — sirve igual para clases e
+  `InjectionToken`. Parámetro de constructor sin tipo ni `@Inject()` y dos
+  clases con el mismo nombre en el proyecto son error en build. Cada dependencia
+  del constructor deja un import de efecto de su archivo (equivalente a la
+  referencia de valor de Ivy).
+- **`declarations`**: solo component/directive/pipe (un servicio ahí es error,
+  como Angular).
+- **`providers` de `@NgModule`**: clase, `{ provide }`, `useClass`, `useValue`,
+  `useFactory` + `deps`, `useExisting`, `multi`, arrays anidados. Último gana;
+  mezclar multi/no-multi es error; lo que no se puede leer en build
+  (`...spread`, `provideX()`, variable) es error, nunca se descarta.
+- **`imports` de `@NgModule`**: `@NgModule` propio (`X.ɵmod.id`, por referencia
+  para que el archivo se evalúe), de otro paquete compilado con ngjs (`ɵmod.id`),
+  `angular.IModule` legacy (`.name`) y módulos por nombre (`"ngAnimate"`).
+  `forRoot()`/`ModuleWithProviders` es error por ahora.
+- **Plataforma** (`PlatformCode`): el build deja `globalThis.ɵngjsPlatform =
+  { bootstrapModule }` al inicio (esbuild: `banner`; Vite: `<script>` en el
+  HTML), solo con `projectType: "application"`. `bootstrapModule(AppModule)` arma
+  el módulo raíz: `ɵroot.providers` (los `providedIn: "root"`, que se anotan en
+  una cola global al evaluarse) antes que el módulo arrancado, así un provider del
+  `@NgModule` pisa al root como en Angular; monta los componentes de `bootstrap`
+  y hace `angular.bootstrap`. Sin NgZone ni `APP_INITIALIZER`.
+- **`angular`** lo importa el compilado (`import ɵangular from "angular"` en cada
+  archivo con `@NgModule`): va dentro del bundle salvo que `ngjs.json` lo liste en
+  `external`. `angular@1.8.3` es `peerDependency` de `ng-js-compiler`.
 
 ## ⬜ Precondiciones de `migrate`
 
-- [x] **Auto-registro en `generate`.** `ModuleRegistrar` (reescrito sobre el
-      `@NgModule({...})`, no chain-calls) hace lo que hace el `ng generate` de
-      Angular: component/directive/pipe van a `declarations` del `*.module.ts`
-      más cercano (subiendo hasta `sourceRoot`, ignorando `-routing.module.ts`)
-      con su `import`; falla antes de escribir si no hay módulo o si hay más de
-      uno en la misma carpeta. Un `module` nuevo solo va a `imports` de otro con
-      `--module <path>`. `--skip-import` no registra. Service/class/guard/etc.
-      no se registran (service: `providers` todavía no lo traduce el compilador).
-- [ ] **Cobertura del compilador — gaps encontrados probando "¿qué pasa si le doy
-      Angular real tal cual?"**:
-  - `providers`/`bootstrap` de `@NgModule` no se traducen (solo `declarations`/
-    `imports`).
+- [x] **Auto-registro en `generate`.** Como `ng generate`: component/directive/
+      pipe van a `declarations` del `*.module.ts` más cercano (subiendo hasta
+      `sourceRoot`, ignorando `-routing.module.ts`) con su `import`; falla antes
+      de escribir si no hay módulo o si hay más de uno en la misma carpeta. Un
+      `module` nuevo solo va a `imports` de otro con `--module <path>`.
+      `--skip-import` no registra. Service no se registra en ningún módulo: se
+      genera con `@Injectable({ providedIn: "root" })`.
+- [ ] **Cobertura del compilador — lo que falta:**
+  - `providers` de `@Component`/`@Directive`: se leen pero no se emiten
+    (jerárquicos).
   - Componentes standalone (sin `@NgModule` que los declare) nunca se registran.
-  - Selectores compuestos (`button[foo]`, `a, b`) tiran error — `SelectorParser`
-    solo soporta tag simple o `[atributo]` simple.
+  - Selectores compuestos (`button[foo]`, `a, b`): `ɵcmp`/`ɵdir` ya los estampan,
+    pero `ModuleWriter`/`SelectorParser` solo registran tag simple o
+    `[atributo]` simple.
   - `@HostBinding`/`@HostListener` se leen (`DecoratorReader`) pero no se
-    traducen a nada funcional en el registro final.
+    traducen a nada funcional.
   - Lifecycle hooks (`ngOnInit`, etc.) no se traducen a `$onInit`/etc. de
     AngularJS.
+  - `APP_INITIALIZER` / NgZone en `bootstrapModule`.
+  - `ModuleWithProviders` (`forRoot()`/`forChild()`) en `imports`.
   - Sin DI avanzada (`inject()`, Router, Forms, HttpClient, RxJS) — fuera de
-    alcance del compilador tal como está pensado (es "registro AngularJS", no
-    un framework).
+    alcance del compilador tal como está pensado.
+- [ ] **`ngjs-core` como consumidor del contrato del compilado** (rebuild
+      pendiente): su `platformBrowserDynamic` tiene que ser la puerta
+      (`() => globalThis.ɵngjsPlatform`), y dejar de resolver en runtime lo que
+      ahora resuelve el compilador.
 - [x] **Más schematics.** `generate` cubre component/directive/pipe/service/module +
       class/interface/enum (TS plano) + guard/resolver (funcionales, `CanActivateFn`/
       `ResolveFn` de `ngjs-core/router`) + interceptor (clase, `implements
@@ -71,15 +113,14 @@ Cerrado en esta sesión — ver [[project_ngjs_repo_responsibilities]]:
       marcador hoy que diga "esto lo instala `migrate`" vs "esto lo desinstala
       `migrate`" — ni a nivel paquete (`ngb-js`) ni a nivel archivo.
 - [x] **Fidelidad `ngjs.json` ↔ `angular.json` real**: `architect.build.
-      configurations`, `fileReplacements` para environments.
+      configurations`, `fileReplacements` para environments, `projectType`
+      (`application`/`library`) llega al compilador.
 
-## 🐛 Bug conocido (no roadmap — arreglo suelto, aparte)
+## ✅ Bug suelto: `--configuration` componible
 
-- **`--configuration` no es componible.** El comentario en `cli-config.ts`
-  (`BuildTarget.configurations`) promete `--configuration staging,es-MX` al
-  estilo Angular real, pero `build-config.ts` hace un lookup de UN solo nombre
-  (`configurations?.[flags.configuration]`) — pasar una lista separada por comas
-  busca esa key literal y no matchea nada.
+- `--configuration staging,es-MX` aplica cada configuration en orden sobre
+  `options` (la última pisa), como Angular real (`BuildConfig.mergeConfigurations`).
+  Un nombre que no existe en `configurations` es error, también como Angular real.
 
 ## ⬜ Parecido a Angular CLI — housekeeping, prioridad baja
 
@@ -92,7 +133,8 @@ No bloquean `migrate`, son pulido de CLI:
 - `ConfigReader.read()` solo mira `process.cwd()` — Angular real sube el árbol
   de directorios hasta encontrar `angular.json`.
 - `--dry-run` en `generate`/`new`.
-- `--flat` en `generate` (hoy siempre crea carpeta propia por schematic).
+- Carpeta propia por schematic en `generate` (Angular real la crea por default;
+  hoy siempre escribe plano, como `--flat`) y `--flat` para volver a lo de hoy.
 - Generación de `.spec.ts` por schematic (Angular real lo hace por default).
 - `ng test` / `ng lint` / `ng add` / `ng update` — sin equivalente.
 - Multi-proyecto (`angular.json` soporta varios `projects`; `ngjs.json` es de

@@ -16,7 +16,7 @@ program
 program
   .command(buildCommandDefinition.name)
   .alias(buildCommandDefinition.alias)
-  .option("-c, --configuration <name>", "configuration de architect.build a aplicar")
+  .option("-c, --configuration <names>", "configuration(s) de architect.build a aplicar, separadas por coma (la última pisa)")
   .action(runBuildCommand);
 
 program

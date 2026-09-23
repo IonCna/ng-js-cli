@@ -24,6 +24,7 @@ describe("BuildConfig.create()", () => {
           options: { entryPoints: { index: "src/index.ts" }, outputPath: "dist", sourceMap: true },
           configurations: {
             production: { outputPath: "dist-prod", sourceMap: false, optimization: true },
+            "es-MX": { outputPath: "dist-es-mx", fileReplacements: [{ replace: "src/locale.ts", with: "src/locale.es-MX.ts" }] },
           },
         },
       },
@@ -34,6 +35,12 @@ describe("BuildConfig.create()", () => {
   afterEach(async () => {
     process.chdir(originalCwd);
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("lleva el projectType de ngjs.json (el compilador solo inyecta la plataforma en una aplicación)", async () => {
+    const config = await BuildConfig.create({});
+    expect(config.projectType).toBe("library");
+    expect(config.dualFormat).toBe(true);
   });
 
   it("sin --configuration usa options tal cual", async () => {
@@ -52,8 +59,21 @@ describe("BuildConfig.create()", () => {
     expect(config.entryPoints).toEqual({ index: "src/index.ts" });
   });
 
-  it("--configuration con nombre inexistente cae a options sin tirar", async () => {
-    const config = await BuildConfig.create({ configuration: "no-existe" });
-    expect(config.outputPath).toBe("dist");
+  it("--configuration con nombre inexistente tira error, como Angular real", async () => {
+    await expect(BuildConfig.create({ configuration: "no-existe" })).rejects.toThrow(/"no-existe" no está definida/);
+    await expect(BuildConfig.create({ configuration: "production,no-existe" })).rejects.toThrow(/"no-existe"/);
+  });
+
+  it("--configuration a,b compone: aplica en orden y la última pisa", async () => {
+    const config = await BuildConfig.create({ configuration: "production,es-MX" });
+    expect(config.outputPath).toBe("dist-es-mx");
+    expect(config.minify).toBe(true);
+    expect(config.sourceMap).toBe(false);
+    expect(config.fileReplacements).toEqual([{ replace: "src/locale.ts", with: "src/locale.es-MX.ts" }]);
+  });
+
+  it("el orden importa y tolera espacios", async () => {
+    const config = await BuildConfig.create({ configuration: "es-MX , production" });
+    expect(config.outputPath).toBe("dist-prod");
   });
 });

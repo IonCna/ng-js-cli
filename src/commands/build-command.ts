@@ -9,9 +9,6 @@ import { templateTransform } from "ng-js-vite/esbuild";
 
 type Format = "esm" | "cjs";
 
-/** El `ModuleWriter` mete `import angular from "angular"` en cualquier `@NgModule` — siempre external, sin depender de que el usuario lo liste en `ngjs.json`. */
-const ALWAYS_EXTERNAL = ["angular"];
-
 export class BuildCommand extends NgjsCommand<BuildConfig> {
   static from(config: BuildConfig): BuildCommand {
     return new BuildCommand(config);
@@ -37,12 +34,13 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       format,
       platform: "browser",
       target: "es2022",
-      external: [...new Set([...ALWAYS_EXTERNAL, ...this.config.external])],
+      // `angular` lo importa el compilado (`ModuleWriter`): va dentro del bundle salvo que `ngjs.json` lo liste en `external`.
+      external: this.config.external,
       sourcemap: this.config.sourceMap,
       minify: this.config.minify,
       // sin esto esbuild escapa `ɵ` (`ɵ`) — válido pero ilegible; `ɵcmp` queda literal.
       charset: "utf8",
-      plugins: [pluginLoader(this.config.sourceRoot, [templateTransform], fileReplacements)],
+      plugins: [pluginLoader(this.config.sourceRoot, [templateTransform], fileReplacements, this.config.projectType)],
     });
   }
 
