@@ -32,6 +32,10 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       outExtension: format === "cjs" ? { ".js": ".cjs" } : undefined,
       bundle: true,
       format,
+      // Varios entry points (subpaths de una librería) comparten módulos: sin `splitting` cada entry trae su propia
+      // copia de las clases (`instanceof` falla entre subpaths) y de los `angular.module` (se registran dos veces).
+      // esbuild solo lo soporta en ESM.
+      splitting: format === "esm" && Object.keys(this.config.entryPoints).length > 1,
       platform: "browser",
       target: "es2022",
       // `angular` lo importa el compilado (`ModuleWriter`): va dentro del bundle salvo que `ngjs.json` lo liste en `external`.
