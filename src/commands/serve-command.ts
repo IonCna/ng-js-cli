@@ -23,7 +23,8 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // `angular` es CommonJS (`module.exports = angular`): Vite lo tiene que pre-bundlear (`optimizeDeps`) para
       // que exista el `import angular from "angular"` que emite `ModuleWriter`. `dedupe`: una librería enlazada
       // (`link:ngjs-core`) resolvería SU copia de `node_modules/angular` — dos AngularJS en la misma página.
-      resolve: { dedupe: ["angular"] },
+      // `tsconfigPaths`: los alias de `compilerOptions.paths` (`@/*`), como `ngjs build` (esbuild) y `ngjs test`.
+      resolve: { dedupe: ["angular"], tsconfigPaths: true },
       optimizeDeps: { include: ["angular"] },
       // Los templates de `ng-js-vite` van como transform PREVIO del compilador (igual que en `build`), no como plugin
       // de Vite aparte: `ModuleWriter` registra `.component()` en el archivo del `@NgModule` con la metadata del
