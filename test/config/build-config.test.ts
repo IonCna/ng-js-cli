@@ -76,4 +76,34 @@ describe("BuildConfig.create()", () => {
     const config = await BuildConfig.create({ configuration: "es-MX , production" });
     expect(config.outputPath).toBe("dist-prod");
   });
+
+  describe("index (solo application)", () => {
+    const writeConfig = async (projectType: NgjsConfig["projectType"], index?: { input: string; output?: string }) => {
+      const config: NgjsConfig = {
+        version: "1",
+        root: ".",
+        projectType,
+        sourceRoot: "src",
+        architect: { build: { options: { entryPoints: { index: "src/index.ts" }, outputPath: "dist", index } } },
+      };
+      await writeFile(join(dir, "ngjs.json"), JSON.stringify(config));
+    };
+
+    it("una librería no emite index.html aunque exista", async () => {
+      await writeFile(join(dir, "index.html"), "<html></html>");
+      expect((await BuildConfig.create({})).index).toBeUndefined();
+    });
+
+    it("sin `index` en ngjs.json usa el index.html de la raíz (el de Vite en serve)", async () => {
+      await writeConfig("application");
+      expect((await BuildConfig.create({})).index).toBeUndefined();
+      await writeFile(join(dir, "index.html"), "<html></html>");
+      expect((await BuildConfig.create({})).index).toEqual({ input: "index.html", output: "index.html" });
+    });
+
+    it("`index.input` explícito; `output` por default es su nombre de archivo", async () => {
+      await writeConfig("application", { input: "src/index.html" });
+      expect((await BuildConfig.create({})).index).toEqual({ input: "src/index.html", output: "index.html" });
+    });
+  });
 });

@@ -1,7 +1,7 @@
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
-import { ngJsTemplateParser } from "ng-js-vite/vite";
+import { TemplateFiles } from "ng-js-vite/esbuild";
 import { createServer, type Plugin } from "vite";
 
 export class ServeCommand extends NgjsCommand<ServeConfig> {
@@ -10,6 +10,9 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
   }
 
   async run(): Promise<void> {
+    // Nombre fijo (sin hash): el `templateUrl` lo fija el escaneo al arrancar; el middleware relee el `.html` en
+    // cada request, así editar un template se ve al recargar.
+    const templates = TemplateFiles.create({ hashed: false });
     const server = await createServer({
       server: {
         port: this.config.port,
@@ -17,17 +20,20 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
         // Sin overrides propios, mejor dejar que Vite use su default.
         allowedHosts: this.config.allowedHosts.length ? this.config.allowedHosts : undefined,
       },
-      // El `ModuleWriter` mete `import angular from "angular"` en cualquier
-      // `@NgModule` — excluido del pre-bundling de Vite (`optimizeDeps`, su
-      // propio esbuild interno) para que no le haga nada raro, mismo trato
-      // que `external` en el esbuild de `build`.
-      optimizeDeps: { exclude: ["angular"] },
-      // `ng-js-vite` y `ng-js-cli` son repos separados (sin workspace compartido),
-      // cada uno con su propia copia de `vite` en `node_modules` — TS ve el
-      // `Plugin` de `ngJsTemplateParser()` como un tipo nominal distinto al de
-      // ESTE `vite` (mismo paquete, dos instancias). En runtime es el mismo
-      // objeto de siempre; el cast es solo para esta discrepancia estructural.
-      plugins: [ngJsTemplateParser() as Plugin, viteTransformPlugin(this.config.sourceRoot)],
+      // `angular` es CommonJS (`module.exports = angular`): Vite lo tiene que pre-bundlear (`optimizeDeps`) para
+      // que exista el `import angular from "angular"` que emite `ModuleWriter`. `dedupe`: una librería enlazada
+      // (`link:ngjs-core`) resolvería SU copia de `node_modules/angular` — dos AngularJS en la misma página.
+      resolve: { dedupe: ["angular"] },
+      optimizeDeps: { include: ["angular"] },
+      // Los templates de `ng-js-vite` van como transform PREVIO del compilador (igual que en `build`), no como plugin
+      // de Vite aparte: `ModuleWriter` registra `.component()` en el archivo del `@NgModule` con la metadata del
+      // ESCANEO — si el escaneo viera el `templateUrl` crudo, lo emitiría relativo al componente dentro de
+      // `app.module.ts`. Así ya ve la URL pública (`/templates/x.html`), que sirve el middleware de abajo.
+      // `ng-js-compiler` trae su propia copia de `vite`: mismo `Plugin` en runtime, tipo nominal distinto para TS.
+      plugins: [
+        viteTransformPlugin(this.config.sourceRoot, [templates]) as Plugin,
+        { name: "ngjs-templates", configureServer: (server) => void server.middlewares.use(templates.middleware()) },
+      ],
     });
 
     await server.listen();

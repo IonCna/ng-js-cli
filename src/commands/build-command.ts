@@ -1,11 +1,13 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import { IndexHtmlWriter } from "@/build/index-html-writer.ts";
+import { PublicDir } from "@/build/public-dir.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { BuildConfig, type BuildFlags } from "@/config/build-config.ts";
 import * as esbuild from "esbuild";
 import { pluginLoader } from "ng-js-compiler/esbuild";
-import { templateTransform } from "ng-js-vite/esbuild";
+import { TemplateFiles, templateTransform } from "ng-js-vite/esbuild";
 
 type Format = "esm" | "cjs";
 
@@ -14,10 +16,21 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     return new BuildCommand(config);
   }
 
+  /**
+   * Aplicación: templates en archivos aparte (`templates/nombre-<hash>.html`, como `ng-js-vite` en Vite). Librería:
+   * inline — un `/templates/...` apuntaría a archivos que la app que la consume no tiene.
+   */
+  private readonly templates = this.config.projectType === "application" ? TemplateFiles.create() : undefined;
+
   async run(): Promise<void> {
     const formats: Format[] = this.config.dualFormat ? ["esm", "cjs"] : ["esm"];
     await Promise.all(formats.map((format) => this.buildFormat(format)));
 
+    await this.templates?.emit(this.config.outputPath);
+    if (this.config.projectType === "application") await PublicDir.copyTo(this.config.outputPath);
+    if (this.config.index) {
+      await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index).write();
+    }
     if (this.config.declarations) this.emitDeclarations();
   }
 
@@ -34,8 +47,10 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       format,
       // Varios entry points (subpaths de una librería) comparten módulos: sin `splitting` cada entry trae su propia
       // copia de las clases (`instanceof` falla entre subpaths) y de los `angular.module` (se registran dos veces).
-      // esbuild solo lo soporta en ESM.
-      splitting: format === "esm" && Object.keys(this.config.entryPoints).length > 1,
+      // En una aplicación, además, cada `import()` (`loadChildren`/`loadComponent`) sale como chunk propio — sin
+      // esto quedaría dentro del bundle inicial. El `banner` (plataforma + zona) se repite por chunk: los dos tienen
+      // guard (`ɵngjsPlatform`/`ɵngjsZonePatched`). esbuild solo lo soporta en ESM.
+      splitting: format === "esm" && (this.config.projectType === "application" || Object.keys(this.config.entryPoints).length > 1),
       platform: "browser",
       target: "es2022",
       // `angular` lo importa el compilado (`ModuleWriter`): va dentro del bundle salvo que `ngjs.json` lo liste en `external`.
@@ -44,7 +59,10 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       minify: this.config.minify,
       // sin esto esbuild escapa `ɵ` (`ɵ`) — válido pero ilegible; `ɵcmp` queda literal.
       charset: "utf8",
-      plugins: [pluginLoader(this.config.sourceRoot, [templateTransform], fileReplacements, this.config.projectType)],
+      plugins: [
+        SingletonPackages.plugin(["angular"], this.config.external),
+        pluginLoader(this.config.sourceRoot, [this.templates ?? templateTransform], fileReplacements, this.config.projectType),
+      ],
     });
   }
 
@@ -67,6 +85,27 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     } catch {
       throw new Error(`"declarations: true" necesita \`typescript\` instalado en el proyecto (${process.cwd()}).`);
     }
+  }
+}
+
+/**
+ * Como `resolve.dedupe` de Vite: una librería enlazada (`link:ngjs-core`) resuelve SU copia de `node_modules/angular`,
+ * y esbuild metería dos AngularJS en el bundle ("Tried to load AngularJS more than once", dos `angular.module`
+ * distintos). Cada paquete listado se resuelve siempre desde el proyecto (`process.cwd()`), una sola copia.
+ */
+class SingletonPackages {
+  static plugin(packages: string[], external: string[]): esbuild.Plugin {
+    const bundled = packages.filter((name) => !external.includes(name));
+    const filter = new RegExp(`^(${bundled.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`);
+    const projectRequire = createRequire(join(process.cwd(), "package.json"));
+
+    return {
+      name: "ngjs-singleton-packages",
+      setup(build) {
+        if (!bundled.length) return;
+        build.onResolve({ filter }, (args) => ({ path: projectRequire.resolve(args.path) }));
+      },
+    };
   }
 }
 

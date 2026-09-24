@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
+import type { IndexHtmlOptions } from "@/build/index-html-writer.ts";
 import type { BuildOptions, FileReplacement, NgjsConfig } from "@/config/cli-config.ts";
 import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 
@@ -22,6 +25,8 @@ export class BuildConfig extends NgjsCommandConfig {
     public readonly fileReplacements: FileReplacement[],
     /** `ApplicationScanner` (`ng-js-compiler`) escanea desde acá — mismo `sourceRoot` de `ngjs.json`. */
     public readonly sourceRoot: string,
+    /** Solo `projectType: "application"`: el `index.html` a emitir en `outputPath` (ver `resolveIndex`). */
+    public readonly index: IndexHtmlOptions | undefined,
   ) {
     super();
   }
@@ -45,7 +50,18 @@ export class BuildConfig extends NgjsCommandConfig {
       config.projectType,
       override.fileReplacements ?? options.fileReplacements ?? [],
       config.sourceRoot,
+      BuildConfig.resolveIndex(config, override.index ?? options.index),
     );
+  }
+
+  /**
+   * `index` de `ngjs.json`; sin él, el `index.html` de la raíz del proyecto — el mismo que sirve Vite en `serve`.
+   * `output` por default: el nombre de `input` (`src/index.html` → `index.html`). Una librería no emite HTML.
+   */
+  private static resolveIndex(config: NgjsConfig, index: BuildOptions["index"]): IndexHtmlOptions | undefined {
+    if (config.projectType !== "application") return undefined;
+    if (index) return { input: index.input, output: index.output ?? basename(index.input) };
+    return existsSync(join(process.cwd(), "index.html")) ? { input: "index.html", output: "index.html" } : undefined;
   }
 
   /** Como Angular real: `a,b` aplica `a` y después `b` encima (la última pisa); un nombre que no existe es error. */
