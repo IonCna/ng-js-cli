@@ -14,6 +14,8 @@ export interface NgjsConfig {
     build: BuildTarget;
     /** Solo tiene sentido para `projectType: "application"` (fase 2, dev-server con Vite + `ng-js-vite`). */
     serve?: ServeTarget;
+    /** `ngjs test` (Vitest + jsdom, specs compilados con `ng-js-compiler`) — todo opcional, como `ng test`. */
+    test?: TestTarget;
   };
 }
 
@@ -78,4 +80,19 @@ export interface Budget {
 export interface ServeTarget {
   options?: { port?: number; allowedHosts?: string[] };
   configurations?: Record<string, Partial<NonNullable<ServeTarget["options"]>>>;
+}
+export interface TestTarget {
+  options?: TestOptions;
+}
+
+export interface TestOptions {
+  /** Globs de specs, relativos a la raíz del proyecto. Default: todos los `.spec.ts` bajo `sourceRoot`. */
+  include?: string[];
+  exclude?: string[];
+  /** Archivos que corren antes de cada spec, después del entorno de `ngjs test` (el `src/test.ts` de Angular). */
+  setupFiles?: string[];
+  /** Default `true`, como `ng test`; `--no-watch` lo apaga. */
+  watch?: boolean;
+  /** Como en `build`: `environment.ts` → `environment.test.ts` (el `fileReplacements` del builder de `ng test`). */
+  fileReplacements?: FileReplacement[];
 }

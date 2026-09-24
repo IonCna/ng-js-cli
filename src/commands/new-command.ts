@@ -51,6 +51,7 @@ export class NewCommand extends NgjsCommand<NewConfig> {
         },
         // `serve` (dev-server Vite) solo aplica a `application` — ver comentario en `ServeTarget`, `cli-config.ts`.
         ...(this.config.projectType === "application" ? { serve: { options: { port: 4200 } } } : {}),
+        test: { options: { include: ["src/**/*.spec.ts"] } },
       },
     };
   }

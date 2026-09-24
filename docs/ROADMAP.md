@@ -25,7 +25,7 @@ usuario.
 
 Ver [[project_ngjs_repo_responsibilities]]:
 
-- **`ng-js-cli`** — orquestador puro: `new`/`generate`/`build`/`serve`/`config`.
+- **`ng-js-cli`** — orquestador puro: `new`/`generate`/`build`/`serve`/`test`/`config`.
   Sin decoradores ni template scoping adentro.
 - **`plugins/ng-js-compiler`** — el compilador de verdad: `@Component`/`@Directive`/
   `@Pipe`/`@Injectable`/`@NgModule` → AngularJS nativo y final, texto literal.
@@ -199,6 +199,15 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `ResolveFn` de `ngjs-core/router`) + interceptor (clase, `implements
       HttpInterceptor` de la raíz `ngjs-core` — sin subpath propio para http).
       Aliases: `cl`/`i`/`e`/`g`/`r`/`itc`.
+- [x] **`ngjs test` (como `ng test`).** Vitest + jsdom desde el CLI, sin
+      `vitest.config.ts` en el proyecto: specs (`architect.test.options.include`,
+      default `<sourceRoot>/**/*.spec.ts`) compilados con `viteTransformPlugin`,
+      templates inline (`templateTransform`), plataforma + parches de zona y API de
+      Jasmine (`spyOn`, `jasmine.createSpyObj`, `toBeTrue`, …) como setup. Watch por
+      default, `--no-watch` para CI. Tipos: `"types": ["ng-js-cli/testing"]`.
+      `generate` escribe el `.spec.ts` con `TestBed` de `ngjs-core/testing`
+      (`--skip-tests` lo omite). Fuera: callback `done`, `fakeAsync`/`tick`,
+      nombres de clase repetidos entre specs (el escaneo exige nombres únicos).
 - [ ] **Inventario de "qué es puente / qué es Angular real."** No hay ningún
       marcador hoy que diga "esto lo instala `migrate`" vs "esto lo desinstala
       `migrate`" — ni a nivel paquete (`ngb-js`) ni a nivel archivo.

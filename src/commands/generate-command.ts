@@ -4,6 +4,7 @@ import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { GenerateConfig } from "@/config/generate-config.ts";
 import { ModuleRegistrar } from "@/schematics/module-registrar.ts";
 import { resolveSchematic, type SchematicKind } from "@/schematics/schematic-registry.ts";
+import { SpecTemplate } from "@/schematics/spec-template.ts";
 
 export class GenerateCommand extends NgjsCommand<GenerateConfig> {
   static from(config: GenerateConfig): GenerateCommand {
@@ -23,6 +24,7 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
 
     await mkdir(dir, { recursive: true });
     const generated = await schematic.generate(name, dir, { prefix: this.config.prefix });
+    if (!this.config.skipTests) await SpecTemplate.for(generated)?.write(dir);
     if (modulePath) await ModuleRegistrar.register(modulePath, generated, dir);
   }
 
@@ -57,9 +59,15 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
 export async function runGenerateCommand(
   schematic: string,
   name: string,
-  options: { skipImport?: boolean; module?: string },
+  options: { skipImport?: boolean; module?: string; skipTests?: boolean },
 ): Promise<void> {
-  const config = await GenerateConfig.create({ schematic, name, skipImport: options.skipImport, module: options.module });
+  const config = await GenerateConfig.create({
+    schematic,
+    name,
+    skipImport: options.skipImport,
+    module: options.module,
+    skipTests: options.skipTests,
+  });
   const cmd = GenerateCommand.from(config);
   await cmd.run();
 }

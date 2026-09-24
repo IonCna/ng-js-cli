@@ -62,6 +62,18 @@ const serveTargetSchema = z.object({
   configurations: z.record(z.string(), serveTargetOptionsSchema.partial()).optional(),
 });
 
+const testTargetSchema = z.object({
+  options: z
+    .object({
+      include: z.array(z.string()).optional(),
+      exclude: z.array(z.string()).optional(),
+      setupFiles: z.array(z.string()).optional(),
+      watch: z.boolean().optional(),
+      fileReplacements: z.array(fileReplacementSchema).optional(),
+    })
+    .optional(),
+});
+
 export const ngjsConfigSchema = z.object({
   version: z.string(),
   root: z.string(),
@@ -71,5 +83,6 @@ export const ngjsConfigSchema = z.object({
   architect: z.object({
     build: buildTargetSchema,
     serve: serveTargetSchema.optional(),
+    test: testTargetSchema.optional(),
   }),
 });

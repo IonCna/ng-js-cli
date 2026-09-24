@@ -137,6 +137,49 @@ describe("GenerateCommand", () => {
     await expect(generate("nope", "card")).rejects.toThrow(/Schematic desconocido/);
   });
 
+  describe(".spec.ts como ng generate", () => {
+    const exists = (file: string) => readFile(join(dir, "src", file), "utf8").then(() => true, () => false);
+
+    it("component: TestBed + ComponentFixture desde ngjs-core/testing", async () => {
+      await generate("component", "card", { skipImport: true });
+
+      const spec = await readFile(join(dir, "src", "card.component.spec.ts"), "utf8");
+      expect(spec).toContain('import { ComponentFixture, TestBed } from "ngjs-core/testing";');
+      expect(spec).toContain('import { CardComponent } from "./card.component";');
+      expect(spec).toContain("declarations: [CardComponent]");
+      expect(spec).toContain("fixture = TestBed.createComponent(CardComponent);");
+    });
+
+    it("service: TestBed.inject; guard: runInInjectionContext con su CanActivateFn", async () => {
+      await generate("service", "user");
+      await generate("guard", "auth");
+
+      expect(await readFile(join(dir, "src", "user.service.spec.ts"), "utf8")).toContain("service = TestBed.inject(UserService);");
+      const guard = await readFile(join(dir, "src", "auth.guard.spec.ts"), "utf8");
+      expect(guard).toContain('import type { CanActivateFn } from "ngjs-core/router";');
+      expect(guard).toContain("TestBed.runInInjectionContext(() => authGuard(...parameters))");
+    });
+
+    it("directive/pipe/class: new de la clase; module/interface/enum no llevan spec", async () => {
+      await generate("pipe", "upper", { skipImport: true });
+      await generate("module", "shared");
+      await generate("interface", "user");
+      await generate("enum", "color");
+
+      expect(await readFile(join(dir, "src", "upper.pipe.spec.ts"), "utf8")).toContain("expect(new UpperPipe()).toBeTruthy();");
+      expect(await exists("shared.module.spec.ts")).toBe(false);
+      expect(await exists("user.spec.ts")).toBe(false);
+      expect(await exists("color.spec.ts")).toBe(false);
+    });
+
+    it("--skip-tests no escribe el spec", async () => {
+      await generate("component", "card", { skipImport: true, skipTests: true });
+
+      expect(await exists("card.component.ts")).toBe(true);
+      expect(await exists("card.component.spec.ts")).toBe(false);
+    });
+  });
+
   describe("auto-registro en @NgModule", () => {
     const appModule = () => readFile(join(dir, "src", "app.module.ts"), "utf8");
 

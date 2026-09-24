@@ -3,6 +3,7 @@ import { configCommandDefinition, runConfigCommand } from "@/commands/config-com
 import { generateCommandDefinition, runGenerateCommand } from "@/commands/generate-command.ts";
 import { newCommandDefinition, runNewCommand } from "@/commands/new-command.ts";
 import { runServeCommand, serveCommandDefinition } from "@/commands/serve-command.ts";
+import { runTestCommand, testCommandDefinition } from "@/commands/test-command.ts";
 import { Command } from "commander";
 
 const program = new Command("ngjs");
@@ -29,6 +30,7 @@ program
   .argument("<name>", "nombre del schematic a generar")
   .option("--skip-import", "no registrar en ningún @NgModule")
   .option("--module <path>", "@NgModule donde registrar, en vez del más cercano")
+  .option("--skip-tests", "no generar el .spec.ts")
   .action(runGenerateCommand);
 
 program
@@ -36,6 +38,13 @@ program
   .alias(serveCommandDefinition.alias)
   .option("-p, --port <port>", "puerto del dev-server", Number)
   .action(runServeCommand);
+
+program
+  .command(testCommandDefinition.name)
+  .alias(testCommandDefinition.alias)
+  .option("--no-watch", "corre los specs una vez y termina (para CI)")
+  .option("--include <globs...>", "globs de specs a correr, en vez de architect.test.options.include")
+  .action(runTestCommand);
 
 program
   .command(configCommandDefinition.name)

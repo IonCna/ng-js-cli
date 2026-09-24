@@ -8,6 +8,8 @@ export interface GenerateFlags {
   skipImport?: boolean;
   /** `--module <path>`: el `@NgModule` donde registrar, en vez del más cercano. */
   module?: string;
+  /** `--skip-tests`: sin el `.spec.ts`. */
+  skipTests?: boolean;
 }
 
 export class GenerateConfig extends NgjsCommandConfig {
@@ -18,6 +20,7 @@ export class GenerateConfig extends NgjsCommandConfig {
     public readonly prefix: string,
     public readonly skipImport: boolean,
     public readonly module: string | undefined,
+    public readonly skipTests: boolean,
   ) {
     super();
   }
@@ -31,6 +34,7 @@ export class GenerateConfig extends NgjsCommandConfig {
       config.prefix ?? "app",
       flags.skipImport ?? false,
       flags.module,
+      flags.skipTests ?? false,
     );
   }
 }

@@ -10,6 +10,9 @@
   "exports": {
     "./types": {
       "types": "./types/contract.d.ts"
+    },
+    "./testing": {
+      "types": "./types/testing.d.ts"
     }
   },
   "scripts": {
@@ -20,15 +23,16 @@
     "@swc/core": "^1.16.2",
     "commander": "^15.0.0",
     "esbuild": "^0.28.1",
+    "jsdom": "^30.1.0",
     "ng-js-compiler": "link:ng-js-compiler",
     "ng-js-vite": "link:ng-js-vite",
+    "vitest": "^5.0.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
     "@types/node": "^22.0.0",
-    "typescript": "~6.0.3",
-    "vitest": "^5.0.0"
+    "typescript": "~6.0.3"
   },
   "peerDependencies": {
     "vite": ">=5.0.0"
