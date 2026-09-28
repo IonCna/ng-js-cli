@@ -8,6 +8,8 @@ import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 export interface BuildFlags {
   /** `--configuration <names>` — qué sets de `architect.build.configurations` mergear sobre `options` (`staging,es-MX`). */
   configuration?: string;
+  /** `--watch` — después del primer build, reconstruye al cambiar algo de `sourceRoot` (ver `BuildCommand.watch`). */
+  watch?: boolean;
 }
 
 export class BuildConfig extends NgjsCommandConfig {

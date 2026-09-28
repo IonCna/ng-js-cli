@@ -1,3 +1,4 @@
+import { watch } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
@@ -23,7 +24,47 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
    */
   private readonly templates = this.config.projectType === "application" ? TemplateFiles.create() : undefined;
 
-  async run(): Promise<void> {
+  /**
+   * `ngjs build --watch`: un build completo y después, con cada cambio bajo `sourceRoot` (agrupados, uno a la vez),
+   * otro sin los `.d.ts` (`tsc` es lo lento; no hacen falta para ver el cambio). Pensado para una librería enlazada
+   * (`link:`) que consume una app con `ngjs serve`: el `dist` nuevo hace recargar la página.
+   */
+  async watch(): Promise<void> {
+    await this.run();
+    console.log(`ngjs build --watch: esperando cambios en ${this.config.sourceRoot}/`);
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let building = false;
+    let pending = false;
+    const rebuild = async (): Promise<void> => {
+      if (building) {
+        pending = true;
+        return;
+      }
+      building = true;
+      const started = Date.now();
+      try {
+        await this.run({ declarations: false });
+        console.log(`ngjs build --watch: reconstruido en ${Date.now() - started}ms`);
+      } catch (error) {
+        console.error(`ngjs build --watch: el build falló\n${error instanceof Error ? error.message : String(error)}`);
+      } finally {
+        building = false;
+        if (pending) {
+          pending = false;
+          void rebuild();
+        }
+      }
+    };
+
+    watch(resolve(this.config.sourceRoot), { recursive: true }, (_event, file) => {
+      if (file && /\.spec\.ts$/.test(String(file))) return;
+      clearTimeout(timer);
+      timer = setTimeout(() => void rebuild(), 100);
+    });
+  }
+
+  async run({ declarations = this.config.declarations }: { declarations?: boolean } = {}): Promise<void> {
     const formats: Format[] = this.config.dualFormat ? ["esm", "cjs"] : ["esm"];
     const styles = GlobalStyles.from(this.config.styles);
     await Promise.all([
@@ -36,7 +77,7 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     if (this.config.index) {
       await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index, styles.injected).write();
     }
-    if (this.config.declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
+    if (declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
   }
 
   private buildFormat(format: Format): Promise<esbuild.BuildResult> {
@@ -97,7 +138,8 @@ class SingletonPackages {
 export async function runBuildCommand(flags: BuildFlags): Promise<void> {
   const config = await BuildConfig.create(flags);
   const cmd = BuildCommand.from(config);
-  await cmd.run();
+  if (flags.watch) await cmd.watch();
+  else await cmd.run();
 }
 
 export const buildCommandDefinition = {

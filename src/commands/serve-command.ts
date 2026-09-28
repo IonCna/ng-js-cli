@@ -37,13 +37,32 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // `ng-js-compiler` trae su propia copia de `vite`: mismo `Plugin` en runtime, tipo nominal distinto para TS.
       plugins: [
         viteTransformPlugin(this.config.sourceRoot, [templates]) as Plugin,
-        { name: "ngjs-templates", configureServer: (server) => void server.middlewares.use(templates.middleware()) },
+        ServeCommand.templatesPlugin(templates),
         ServeCommand.stylesPlugin(GlobalStyles.from(this.config.styles)),
       ],
     });
 
     await server.listen();
     server.printUrls();
+  }
+
+  /**
+   * Sirve `/templates/…` y `/styles/…` (`TemplateFiles.middleware`). Esos `.html`/`.css` no están en el grafo de
+   * módulos de Vite, así que editarlos no recargaba nada: se da por cambiado el componente dueño (el mismo evento del
+   * watcher que al editar el `.ts`): el compilador lo recompila — `ɵngContent` puede cambiar — y Vite recarga.
+   */
+  private static templatesPlugin(templates: TemplateFiles): Plugin {
+    return {
+      name: "ngjs-templates",
+      configureServer: (server) => {
+        server.middlewares.use(templates.middleware());
+        const onChange = (file: string) => {
+          for (const owner of templates.ownersOf(file)) server.watcher.emit("change", owner);
+        };
+        server.watcher.on("change", onChange);
+        server.watcher.on("unlink", onChange);
+      },
+    };
   }
 
   /**

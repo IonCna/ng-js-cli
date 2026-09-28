@@ -18,6 +18,7 @@ program
   .command(buildCommandDefinition.name)
   .alias(buildCommandDefinition.alias)
   .option("-c, --configuration <names>", "configuration(s) de architect.build a aplicar, separadas por coma (la última pisa)")
+  .option("-w, --watch", "reconstruye al cambiar algo de sourceRoot (sin regenerar los .d.ts)")
   .action(runBuildCommand);
 
 program
