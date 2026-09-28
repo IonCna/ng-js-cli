@@ -1,5 +1,6 @@
 import { GlobalStyles } from "@/build/global-styles.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
+import { AngularDependencies } from "@/serve/angular-dependencies.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
 import { TemplateFiles } from "ng-js-vite/esbuild";
@@ -26,7 +27,9 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // (`link:ngjs-core`) resolvería SU copia de `node_modules/angular` — dos AngularJS en la misma página.
       // `tsconfigPaths`: los alias de `compilerOptions.paths` (`@/*`), como `ngjs build` (esbuild) y `ngjs test`.
       resolve: { dedupe: ["angular"], tsconfigPaths: true },
-      optimizeDeps: { include: ["angular"] },
+      // `angular` y lo que lo requiere, todo desde el arranque — ver `AngularDependencies` (bug de Vite 8 al
+      // re-optimizar a mitad de sesión: "does not provide an export named 'n'").
+      optimizeDeps: { include: AngularDependencies.include() },
       // Los templates de `ng-js-vite` van como transform PREVIO del compilador (igual que en `build`), no como plugin
       // de Vite aparte: `ModuleWriter` registra `.component()` en el archivo del `@NgModule` con la metadata del
       // ESCANEO — si el escaneo viera el `templateUrl` crudo, lo emitiría relativo al componente dentro de
