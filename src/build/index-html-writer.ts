@@ -11,7 +11,8 @@ export interface IndexHtmlOptions {
  * El `index.html` de una aplicación en el build: el mismo que sirve Vite en `serve` (un `<script type="module"
  * src="/src/index.ts">` apuntando al entry fuente), con cada script de un entry point reescrito al bundle que
  * emitió esbuild (`index.js`). Si el HTML no referencia ningún entry, se agregan antes de `</body>`, como Angular.
- * La plataforma (`ɵngjsPlatform`) ya va en el `banner` del bundle — el HTML no necesita nada más.
+ * La plataforma (`ɵngjsPlatform`) ya va en el `banner` del bundle. Los estilos globales inyectados (`styles`) van
+ * como `<link rel="stylesheet">` antes de `</head>`, en orden, como Angular.
  */
 export class IndexHtmlWriter {
   private static readonly SCRIPT = /<script\b([^>]*?)\bsrc=(["'])([^"']+)\2([^>]*)>\s*<\/script>/gi;
@@ -21,10 +22,17 @@ export class IndexHtmlWriter {
     private readonly entryPoints: Record<string, string>,
     private readonly outputPath: string,
     private readonly options: IndexHtmlOptions,
+    /** `.css` relativos a `outputPath` (`GlobalStyles.injected`). */
+    private readonly styles: string[],
   ) {}
 
-  static from(entryPoints: Record<string, string>, outputPath: string, options: IndexHtmlOptions): IndexHtmlWriter {
-    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options);
+  static from(
+    entryPoints: Record<string, string>,
+    outputPath: string,
+    options: IndexHtmlOptions,
+    styles: string[] = [],
+  ): IndexHtmlWriter {
+    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles);
   }
 
   async write(): Promise<void> {
@@ -35,6 +43,17 @@ export class IndexHtmlWriter {
   }
 
   transform(html: string): string {
+    return this.injectStyles(this.rewriteScripts(html));
+  }
+
+  private injectStyles(html: string): string {
+    if (!this.styles.length) return html;
+    const links = this.styles.map((href) => `<link rel="stylesheet" href="${this.prefix()}${href}">`).join("\n");
+    if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${links}\n</head>`);
+    return /<body\b/i.test(html) ? html.replace(/<body\b/i, `${links}\n<body`) : `${links}\n${html}`;
+  }
+
+  private rewriteScripts(html: string): string {
     const bundles = this.bundlesBySource();
     let matched = false;
 
@@ -52,11 +71,16 @@ export class IndexHtmlWriter {
 
   /** Ruta absoluta del entry fuente → URL del bundle, relativa al `index.html` emitido. */
   private bundlesBySource(): Map<string, string> {
-    const depth = this.options.output.split(/[\\/]/).length - 1;
-    const prefix = depth ? "../".repeat(depth) : "";
+    const prefix = this.prefix();
     return new Map(
       Object.entries(this.entryPoints).map(([name, source]) => [resolve(this.root, source), `${prefix}${name}.js`]),
     );
+  }
+
+  /** De la carpeta del `index.html` emitido a `outputPath` (`app/index.html` → `../`). */
+  private prefix(): string {
+    const depth = this.options.output.split(/[\\/]/).length - 1;
+    return depth ? "../".repeat(depth) : "";
   }
 
   /** `/src/index.ts?x` o `src/index.ts` → absoluta desde la raíz del proyecto (la raíz de Vite en `serve`). */

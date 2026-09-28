@@ -48,7 +48,8 @@ export interface BuildOptions {
   // --- Solo `projectType: "application"` (consumo final en browser) ---
   index?: { input: string; output?: string };
   assets?: AssetGlob[];
-  styles?: StyleEntry[];
+  /** Estilos globales, como Angular real: `"src/styles.css"` o `{ input, bundleName?, inject? }`. También en `serve`. */
+  styles?: (string | StyleEntry)[];
   scripts?: StyleEntry[];
   budgets?: Budget[];
 }

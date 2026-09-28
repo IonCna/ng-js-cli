@@ -32,4 +32,15 @@ describe("IndexHtmlWriter.transform()", () => {
     const html = `<script type="module" src="/src/index.ts"></script>`;
     expect(writer("app/index.html").transform(html)).toBe(`<script type="module" src="../index.js"></script>`);
   });
+
+  it("los estilos inyectados van como <link> antes de </head>, en orden", () => {
+    const html = `<html><head><title>x</title></head><body></body></html>`;
+    const withStyles = IndexHtmlWriter.from({ index: "src/index.ts" }, "dist", { input: "index.html", output: "app/index.html" }, [
+      "styles.css",
+      "theme.css",
+    ]);
+    expect(withStyles.transform(html)).toBe(
+      `<html><head><title>x</title><link rel="stylesheet" href="../styles.css">\n<link rel="stylesheet" href="../theme.css">\n</head><body><script type="module" src="../index.js"></script>\n</body></html>`,
+    );
+  });
 });

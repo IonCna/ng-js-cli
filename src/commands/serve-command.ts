@@ -1,3 +1,4 @@
+import { GlobalStyles } from "@/build/global-styles.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
@@ -34,11 +35,35 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       plugins: [
         viteTransformPlugin(this.config.sourceRoot, [templates]) as Plugin,
         { name: "ngjs-templates", configureServer: (server) => void server.middlewares.use(templates.middleware()) },
+        ServeCommand.stylesPlugin(GlobalStyles.from(this.config.styles)),
       ],
     });
 
     await server.listen();
     server.printUrls();
+  }
+
+  /**
+   * `styles` de `architect.build.options`, como `ng serve`: un `<link>` por archivo fuente en el `index.html` (Vite
+   * los procesa y les da HMR de CSS) y `/<bundleName>.css` para los que se cargan a mano (`inject: false`).
+   */
+  private static stylesPlugin(styles: GlobalStyles): Plugin {
+    return {
+      name: "ngjs-global-styles",
+      transformIndexHtml: () =>
+        styles.injectedSourceUrls.map((href) => ({
+          tag: "link",
+          attrs: { rel: "stylesheet", href },
+          injectTo: "head" as const,
+        })),
+      configureServer: (server) =>
+        void server.middlewares.use((request, response, next) => {
+          const css = styles.bundleSource(request.url?.split("?")[0] ?? "");
+          if (css === undefined) return next();
+          response.setHeader("Content-Type", "text/css");
+          response.end(css);
+        }),
+    };
   }
 }
 

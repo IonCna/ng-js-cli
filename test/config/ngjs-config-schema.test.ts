@@ -19,7 +19,7 @@ const validConfig: NgjsConfig = {
         declarations: false,
         index: { input: "src/index.html" },
         assets: [{ glob: "**/*", input: "src/assets", output: "assets" }],
-        styles: [{ input: "src/styles.css" }],
+        styles: ["src/styles.css", { input: "src/print.css", bundleName: "print", inject: false }],
         budgets: [{ type: "initial", maximumWarning: "500kb" }],
       },
       configurations: { production: { optimization: true } },
@@ -31,6 +31,12 @@ const validConfig: NgjsConfig = {
 describe("ngjsConfigSchema", () => {
   it("acepta una NgjsConfig completa y válida", () => {
     expect(ngjsConfigSchema.safeParse(validConfig).success).toBe(true);
+  });
+
+  it("rechaza una entrada de styles que no es string ni { input }", () => {
+    const options = { ...validConfig.architect.build.options, styles: [42] };
+    const result = ngjsConfigSchema.safeParse({ ...validConfig, architect: { ...validConfig.architect, build: { options } } });
+    expect(result.success).toBe(false);
   });
 
   it("rechaza un projectType inválido", () => {

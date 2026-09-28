@@ -42,7 +42,7 @@ const buildOptionsSchema = z.object({
   htmlLoader: z.boolean().optional(),
   index: z.object({ input: z.string(), output: z.string().optional() }).optional(),
   assets: z.array(assetGlobSchema).optional(),
-  styles: z.array(styleEntrySchema).optional(),
+  styles: z.array(z.union([z.string(), styleEntrySchema])).optional(),
   scripts: z.array(styleEntrySchema).optional(),
   budgets: z.array(budgetSchema).optional(),
 });

@@ -23,7 +23,7 @@ describe("BuildConfig.create()", () => {
         build: {
           options: { entryPoints: { index: "src/index.ts" }, outputPath: "dist", sourceMap: true },
           configurations: {
-            production: { outputPath: "dist-prod", sourceMap: false, optimization: true },
+            production: { outputPath: "dist-prod", sourceMap: false, optimization: true, styles: ["src/prod.css"] },
             "es-MX": { outputPath: "dist-es-mx", fileReplacements: [{ replace: "src/locale.ts", with: "src/locale.es-MX.ts" }] },
           },
         },
@@ -57,6 +57,13 @@ describe("BuildConfig.create()", () => {
     expect(config.minify).toBe(true);
     // no pisado por la configuration — sigue viniendo de options
     expect(config.entryPoints).toEqual({ index: "src/index.ts" });
+  });
+
+  it("styles de options (o de la configuration que los pise) y optimization.styles minifica los estilos", async () => {
+    expect((await BuildConfig.create({})).styles).toEqual([]);
+    const production = await BuildConfig.create({ configuration: "production" });
+    expect(production.styles).toEqual(["src/prod.css"]);
+    expect(production.minifyStyles).toBe(true);
   });
 
   it("--configuration con nombre inexistente tira error, como Angular real", async () => {

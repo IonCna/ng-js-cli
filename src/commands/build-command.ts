@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
+import { GlobalStyles } from "@/build/global-styles.ts";
 import { IndexHtmlWriter } from "@/build/index-html-writer.ts";
 import { PublicDir } from "@/build/public-dir.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
@@ -24,12 +25,16 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
 
   async run(): Promise<void> {
     const formats: Format[] = this.config.dualFormat ? ["esm", "cjs"] : ["esm"];
-    await Promise.all(formats.map((format) => this.buildFormat(format)));
+    const styles = GlobalStyles.from(this.config.styles);
+    await Promise.all([
+      ...formats.map((format) => this.buildFormat(format)),
+      styles.build(this.config.outputPath, { minify: this.config.minifyStyles, sourceMap: this.config.sourceMap }),
+    ]);
 
     await this.templates?.emit(this.config.outputPath);
     if (this.config.projectType === "application") await PublicDir.copyTo(this.config.outputPath);
     if (this.config.index) {
-      await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index).write();
+      await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index, styles.injected).write();
     }
     if (this.config.declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
   }

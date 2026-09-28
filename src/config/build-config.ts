@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { IndexHtmlOptions } from "@/build/index-html-writer.ts";
-import type { BuildOptions, FileReplacement, NgjsConfig } from "@/config/cli-config.ts";
+import type { BuildOptions, FileReplacement, NgjsConfig, StyleEntry } from "@/config/cli-config.ts";
 import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 
 /** Flags de `ngjs build` (línea de comandos) — lo que NO vive en `ngjs.json`. */
@@ -17,6 +17,8 @@ export class BuildConfig extends NgjsCommandConfig {
     public readonly external: string[],
     public readonly sourceMap: boolean,
     public readonly minify: boolean,
+    /** `optimization.styles` (o `optimization: true`) — minifica los estilos globales. */
+    public readonly minifyStyles: boolean,
     public readonly declarations: boolean,
     /** `projectType: "library"` — esm+cjs (no solo esm). */
     public readonly dualFormat: boolean,
@@ -27,6 +29,8 @@ export class BuildConfig extends NgjsCommandConfig {
     public readonly sourceRoot: string,
     /** Solo `projectType: "application"`: el `index.html` a emitir en `outputPath` (ver `resolveIndex`). */
     public readonly index: IndexHtmlOptions | undefined,
+    /** `styles` de `ngjs.json` tal cual (ver `GlobalStyles`). */
+    public readonly styles: (string | StyleEntry)[],
   ) {
     super();
   }
@@ -38,6 +42,7 @@ export class BuildConfig extends NgjsCommandConfig {
 
     const optimization = override.optimization ?? options.optimization ?? false;
     const minify = typeof optimization === "boolean" ? optimization : Boolean(optimization.scripts);
+    const minifyStyles = typeof optimization === "boolean" ? optimization : Boolean(optimization.styles);
 
     return new BuildConfig(
       override.entryPoints ?? options.entryPoints,
@@ -45,12 +50,14 @@ export class BuildConfig extends NgjsCommandConfig {
       override.external ?? options.external ?? [],
       override.sourceMap ?? options.sourceMap ?? false,
       minify,
+      minifyStyles,
       override.declarations ?? options.declarations ?? false,
       config.projectType === "library",
       config.projectType,
       override.fileReplacements ?? options.fileReplacements ?? [],
       config.sourceRoot,
       BuildConfig.resolveIndex(config, override.index ?? options.index),
+      override.styles ?? options.styles ?? [],
     );
   }
 
