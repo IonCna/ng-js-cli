@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
+import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
 import { IndexHtmlWriter } from "@/build/index-html-writer.ts";
 import { PublicDir } from "@/build/public-dir.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
@@ -31,7 +31,7 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     if (this.config.index) {
       await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index).write();
     }
-    if (this.config.declarations) this.emitDeclarations();
+    if (this.config.declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
   }
 
   private buildFormat(format: Format): Promise<esbuild.BuildResult> {
@@ -64,27 +64,6 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
         pluginLoader(this.config.sourceRoot, [this.templates ?? templateTransform], fileReplacements, this.config.projectType),
       ],
     });
-  }
-
-  /**
-   * `tsc` no sabe de decoradores-vía-SWC ni de `templateUrl` inline — solo emite `.d.ts`, nunca JS (`emitDeclarationOnly`).
-   * Corre el `tsc` del PROYECTO (no uno del CLI) con el mismo runtime que corre el CLI (`process.execPath`),
-   * así funciona igual bajo node que bajo bun.
-   */
-  private emitDeclarations(): void {
-    execFileSync(
-      process.execPath,
-      [this.resolveTsc(), "--emitDeclarationOnly", "--declaration", "--outDir", `${this.config.outputPath}/types`],
-      { stdio: "inherit" },
-    );
-  }
-
-  private resolveTsc(): string {
-    try {
-      return createRequire(join(process.cwd(), "package.json")).resolve("typescript/bin/tsc");
-    } catch {
-      throw new Error(`"declarations: true" necesita \`typescript\` instalado en el proyecto (${process.cwd()}).`);
-    }
   }
 }
 
