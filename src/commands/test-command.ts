@@ -5,6 +5,7 @@ import type { FileReplacement } from "@/config/cli-config.ts";
 import { TestConfig, type TestFlags } from "@/config/test-config.ts";
 import { TestEnvironment } from "@/test/test-environment.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
+import { TemplateCompiler } from "ng-js-template-compiler";
 import { templateTransform } from "ng-js-vite/esbuild";
 import type { Plugin } from "vite";
 import { startVitest } from "vitest/node";
@@ -49,7 +50,7 @@ export class TestCommand extends NgjsCommand<TestConfig> {
         // `ng-js-compiler` trae su propia copia de `vite`: mismo `Plugin` en runtime, tipo nominal distinto para TS.
         plugins: [
           FileReplacements.plugin(this.config.fileReplacements),
-          viteTransformPlugin(this.config.sourceRoot, [templateTransform], this.config.projectType) as Plugin,
+          viteTransformPlugin(this.config.sourceRoot, [TemplateCompiler.create(this.config.sourceRoot), templateTransform], this.config.projectType) as Plugin,
         ],
         // Una sola copia de AngularJS: la del proyecto, también para `ngjs-core` (ver `ServeCommand`). `tsconfigPaths`:
         // los alias de `compilerOptions.paths` (`@ngb/*`), como `ngjs build` (esbuild los lee solo) y `ng test`.

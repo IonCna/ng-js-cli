@@ -3,6 +3,7 @@ import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { AngularDependencies } from "@/serve/angular-dependencies.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
+import { TemplateCompiler } from "ng-js-template-compiler";
 import { TemplateFiles } from "ng-js-vite/esbuild";
 import { createServer, type Plugin } from "vite";
 
@@ -15,6 +16,7 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
     // Nombre fijo (sin hash): el `templateUrl` lo fija el escaneo al arrancar; el middleware relee el `.html` en
     // cada request, así editar un template se ve al recargar.
     const templates = TemplateFiles.create({ hashed: false });
+    const templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
     const server = await createServer({
       server: {
         port: this.config.port,
@@ -36,8 +38,8 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // `app.module.ts`. Así ya ve la URL pública (`/templates/x.html`), que sirve el middleware de abajo.
       // `ng-js-compiler` trae su propia copia de `vite`: mismo `Plugin` en runtime, tipo nominal distinto para TS.
       plugins: [
-        viteTransformPlugin(this.config.sourceRoot, [templates]) as Plugin,
-        ServeCommand.templatesPlugin(templates),
+        viteTransformPlugin(this.config.sourceRoot, [templateCompiler, templates]) as Plugin,
+        ServeCommand.templatesPlugin(templates, templateCompiler),
         ServeCommand.stylesPlugin(GlobalStyles.from(this.config.styles)),
       ],
     });
@@ -51,13 +53,15 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
    * módulos de Vite, así que editarlos no recargaba nada: se da por cambiado el componente dueño (el mismo evento del
    * watcher que al editar el `.ts`): el compilador lo recompila — `ɵngContent` puede cambiar — y Vite recarga.
    */
-  private static templatesPlugin(templates: TemplateFiles): Plugin {
+  private static templatesPlugin(templates: TemplateFiles, templateCompiler: TemplateCompiler): Plugin {
     return {
       name: "ngjs-templates",
       configureServer: (server) => {
         server.middlewares.use(templates.middleware());
         const onChange = (file: string) => {
-          for (const owner of templates.ownersOf(file)) server.watcher.emit("change", owner);
+          // Un `.html` que `ng-js-template-compiler` reescribió lo sirve su copia: el dueño se conoce por el original.
+          const owners = new Set([...templates.ownersOf(file), ...templateCompiler.ownersOf(file)]);
+          for (const owner of owners) server.watcher.emit("change", owner);
         };
         server.watcher.on("change", onChange);
         server.watcher.on("unlink", onChange);

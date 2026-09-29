@@ -1,4 +1,5 @@
 import { watch } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
@@ -8,7 +9,8 @@ import { PublicDir } from "@/build/public-dir.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { BuildConfig, type BuildFlags } from "@/config/build-config.ts";
 import * as esbuild from "esbuild";
-import { pluginLoader } from "ng-js-compiler/esbuild";
+import { LibraryManifest, type NgjsManifest, pluginLoader } from "ng-js-compiler/esbuild";
+import { TemplateCompiler } from "ng-js-template-compiler";
 import { TemplateFiles, templateTransform } from "ng-js-vite/esbuild";
 
 type Format = "esm" | "cjs";
@@ -23,6 +25,12 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
    * inline — un `/templates/...` apuntaría a archivos que la app que la consume no tiene.
    */
   private readonly templates = this.config.projectType === "application" ? TemplateFiles.create() : undefined;
+
+  /** `disabled="x"` → `ng-disabled="x"` en los templates (ver `ng-js-template-compiler`), antes del scope de `ng-js-vite`. */
+  private readonly templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
+
+  /** Librería: lo que publica en `ngjs-manifest.json` (ver `LibraryManifest`), del escaneo del build. */
+  private manifest?: NgjsManifest;
 
   /**
    * `ngjs build --watch`: un build completo y después, con cada cambio bajo `sourceRoot` (agrupados, uno a la vez),
@@ -73,6 +81,10 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     ]);
 
     await this.templates?.emit(this.config.outputPath);
+    if (this.manifest) {
+      const manifestPath = join(this.config.outputPath, LibraryManifest.FILE_NAME);
+      await writeFile(manifestPath, `${JSON.stringify(this.manifest, null, 2)}\n`);
+    }
     if (this.config.projectType === "application") await PublicDir.copyTo(this.config.outputPath);
     if (this.config.index) {
       await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index, styles.injected).write();
@@ -107,7 +119,9 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       charset: "utf8",
       plugins: [
         SingletonPackages.plugin(["angular"], this.config.external),
-        pluginLoader(this.config.sourceRoot, [this.templates ?? templateTransform], fileReplacements, this.config.projectType),
+        pluginLoader(this.config.sourceRoot, [this.templateCompiler, this.templates ?? templateTransform], fileReplacements, this.config.projectType, (scanner) => {
+          if (this.config.projectType === "library") this.manifest = LibraryManifest.from(scanner);
+        }),
       ],
     });
   }
