@@ -125,7 +125,8 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       entryPoints: this.config.entryPoints,
       outdir: this.config.outputPath,
       outExtension: format === "cjs" ? { ".js": ".cjs" } : undefined,
-      entryNames: hashBundles ? "[name]-[hash]" : "[name]",
+      // `[dir]`: una entrada `core/index` sale en `core/index.js` (sin él, todas las `*/index` pisan `index.js`).
+      entryNames: hashBundles ? "[dir]/[name]-[hash]" : "[dir]/[name]",
       metafile: true,
       bundle: true,
       format,

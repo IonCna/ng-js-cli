@@ -172,11 +172,22 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       heredado de otro archivo; `ngOnChanges` ve los valores transformados). `required` lo valida
       `ng-js-template-compiler` en los templates. `styleUrls`/`styles` los lee `ng-js-vite`; `generate component`
       emite `styleUrls`.
-- [ ] **Cobertura del compilador — lo que falta:**
-  - DI: herencia desde una base de OTRO paquete (no está en el escaneo del
-    proyecto) no se resuelve en build. Inyectar una directiva/componente del
-    MISMO elemento que se construye después (orden de controllers de AngularJS)
-    da la instancia a medio armar.
+- [x] **Cobertura del compilador — DI:**
+  - Herencia desde una base de OTRO paquete (`InheritedFactory`, la versión de
+    `ɵɵgetInheritedFactory` de Ivy): todo `ɵfac` construye `this.ɵT` si se lo
+    piden (el `t` de Ivy); una subclase sin `constructor` cuya cadena termina
+    fuera del escaneo pide en runtime el `ɵfac` de esa base y le agrega lo propio
+    (sus `inject()`, guard de tag, wiring de host). Los `inject()` de
+    construcción se suman entre subclase y base (`InjectedValues.around`).
+    Su definición (`inputs`/`outputs`, queries, `hostDirectives` y los
+    bindings de AngularJS) se suma en runtime a la de la subclase
+    (`InheritedDefinition`, como `ɵɵInheritDefinitionFeature`) y la
+    registración lee de ahí los bindings; una base abstracta estampa
+    `definition.bindings` para eso.
+  - Directiva/componente del MISMO elemento que AngularJS construye después
+    (`ElementInstances.lazyControllerSource`): un decorador de `$controller` la
+    construye bajo demanda, una sola vez, en orden de dependencia (como el
+    injector de nodo de Angular); un ciclo es `NG0200`.
 - [ ] **`ngjs-core` como consumidor del contrato del compilado** (rebuild
       pendiente). Criterio: el compilador resuelve lo que es dato de build o
       primitiva de AngularJS; lo que produce un objeto de librería o tiene
@@ -213,8 +224,14 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       Jasmine (`spyOn`, `jasmine.createSpyObj`, `toBeTrue`, …) como setup. Watch por
       default, `--no-watch` para CI. Tipos: `"types": ["ng-js-cli/testing"]`.
       `generate` escribe el `.spec.ts` con `TestBed` de `ngjs-core/testing`
-      (`--skip-tests` lo omite). Fuera: callback `done`, `fakeAsync`/`tick`,
-      nombres de clase repetidos entre specs (el escaneo exige nombres únicos).
+      (`--skip-tests` lo omite). El callback `done` de Jasmine (y `done.fail`)
+      funciona en `it`/`beforeEach`/… (`JasmineShim`: un parámetro que no es el
+      contexto de Vitest desestructurado). `fakeAsync`/`tick`/`flush`/
+      `flushMicrotasks`/`discardPeriodicTasks`/`waitForAsync` de
+      `ngjs-core/testing`: los parches de zona le entregan los timers al reloj
+      falso (`globalThis.ɵngjsFakeAsync`, también a un `$browser` creado antes).
+      Fuera: nombres de clase repetidos entre specs (el escaneo exige nombres
+      únicos).
 - [ ] **Inventario de "qué es puente / qué es Angular real."** No hay ningún
       marcador hoy que diga "esto lo instala `migrate`" vs "esto lo desinstala
       `migrate`" — ni a nivel paquete (`ngb-js`) ni a nivel archivo.
@@ -373,7 +390,7 @@ reimplementar `bindToController` a mano. Limitación real y documentada:
 `bindToController` sigue posando los bindings sobre el objeto vacío devuelto
 (inofensivo, nadie los lee).
 
-Sin valor (`tag[attr=value]`) — queda afuera de este alcance.
+Generalizado después: ver "✅ Selectores de Angular completos" más abajo.
 
 Cubierto con tests unitarios (`selector-parser.test.ts`, `decorator-writer.test.ts`)
 y de integración (`angularjs.test.ts`: un `<button>` con el atributo activa la
@@ -409,12 +426,26 @@ del lado de `ModuleWriter` (a dónde se registra).
   (`SelectorParser` parsea cada parte por separado, el mensaje de error usa
   el texto de la parte que falló, no la lista completa).
 
-Sin `tag[attr=value]` — mismo límite que el ítem anterior.
+Ver también "✅ Selectores de Angular completos".
 
 Cubierto con tests unitarios (`selector-parser.test.ts`, `decorator-writer.test.ts`,
 `module-writer.test.ts` — incluye el caso de dedupe) y de integración
 (`angularjs.test.ts`: `"button[x], label[x]"` activa la misma clase en
 cualquiera de los dos tags, sin `$compile:multidir`).
+
+## ✅ Selectores de Angular completos (`[attr=valor]`, `.clase`, `:not()`)
+
+`SelectorParser` lee el selector compuesto de Angular por alternativa (tag, `[atributo]`, `[atributo=valor]`,
+`.clase`, `:not(...)`, también con lista adentro; sin combinadores, como Angular). AngularJS registra por un solo
+nombre: el primer atributo (`A`), si no la primera clase (`C`), si no el tag (`E`); `[x], .x` junta `"AC"`. El resto
+lo valida el guard del factory (el mismo de `tag[atributo]`, que conserva su forma y su aviso): la lista entera como
+un OR; si todas las alternativas comparten registro, lo registrado no se vuelve a mirar (en el comentario ancla de un
+`<ng-template>` no hay atributos que leer), y si no, cada alternativa entera, con los atributos normalizados como
+AngularJS (`data-`/`x-`). `ɵcmp`/`ɵdir.selectors` tienen la forma de Ivy con `SelectorFlags` (`CLASS` 8, `NOT` 1, …),
+que `ngjs-core` (`CompiledType.registrations`) y `ng-js-template-compiler` (`SelectorParser.matches`) leen igual.
+
+Cubierto con tests unitarios (`selector-parser.test.ts`, `decorator-writer.test.ts`) y de integración
+(`angularjs.test.ts`: `.app-badge` y `button[type=submit]:not([disabled])` solo se aplican donde coincide todo).
 
 ## ✅ Patches globales para digest automático (sin `NgZone`, sin Zone.js real)
 
@@ -477,7 +508,7 @@ No bloquean `migrate`, son pulido de CLI:
 - Carpeta propia por schematic en `generate` (Angular real la crea por default;
   hoy siempre escribe plano, como `--flat`) y `--flat` para volver a lo de hoy.
 - Generación de `.spec.ts` por schematic (Angular real lo hace por default).
-- `ng test` / `ng lint` / `ng add` / `ng update` — sin equivalente.
+- `ng lint` / `ng add` / `ng update` — sin equivalente (`ng test` ya es `ngjs test`).
 - Multi-proyecto (`angular.json` soporta varios `projects`; `ngjs.json` es de
   un solo proyecto) — la brecha estructural más grande si algún día hay
   monorepo con más de una app/lib.

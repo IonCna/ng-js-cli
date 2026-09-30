@@ -29,7 +29,7 @@ describe("AngularDependencies.include()", () => {
     await pkg(lib, { module: "dist/index.js", dependencies: { "@uirouter/angularjs": "^1", rxjs: "^7" } });
     await pkg(join(lib, "node_modules", "@uirouter", "angularjs"), { main: "r.js", peerDependencies: { angular: ">=1.2" } });
     await pkg(join(lib, "node_modules", "rxjs"), { module: "index.js" });
-    await symlink(lib, join(app, "node_modules", "my-lib"), "dir");
+    await symlink(lib, join(app, "node_modules", "my-lib"), "junction"); // "junction": en Windows no pide permisos de admin; fuera de Windows se ignora
   });
 
   afterEach(() => rm(dir, { recursive: true, force: true }));

@@ -5,8 +5,10 @@
  * encima, así también sirven `vi`, `toHaveBeenCalledWith` y compañía. Como en Jasmine, `spyOn` no llama al original
  * (`.and.callThrough()` para eso) y se restaura solo después de cada test (`restoreMocks`, en `TestCommand`).
  *
- * Fuera a propósito: el callback `done` (un `it("x", ({ expect }) => …)` de Vitest no se distingue de un
- * `it("x", (done) => …)`) y `jasmine.clock()` (es terreno de `fakeAsync`).
+ * El callback `done` de Jasmine (`it("x", (done) => …)`, también `done.fail()` y `done(error)`) en `it`/`test`/
+ * `beforeEach`/`afterEach`/`beforeAll`/`afterAll`: una función con un parámetro que NO es el contexto de Vitest
+ * desestructurado (`({ expect }) => …`) espera a `done` (una promesa). Fuera a propósito: `jasmine.clock()` (es
+ * terreno de `fakeAsync`).
  *
  * JS plano: corre como setup file de Vitest, sin imports.
  */
@@ -132,6 +134,41 @@ export class JasmineShim {
     stringMatching: expect.stringMatching,
     stringContaining: expect.stringContaining,
   };
+
+  // \`done\` de Jasmine: el primer parámetro es un nombre (no \`{ … }\`, el contexto de Vitest desestructurado).
+  function usesDone(fn) {
+    if (typeof fn !== "function" || fn.length === 0) return false;
+    var source = Function.prototype.toString.call(fn).replace(/^\\s*async\\s*/, "");
+    var match = /^(?:function[^(]*)?\\(\\s*([^\\s,)]*)/.exec(source) || /^([A-Za-z_$][\\w$]*)\\s*=>/.exec(source);
+    return !!match && match[1] !== "" && match[1].charAt(0) !== "{";
+  }
+  function withDone(fn) {
+    if (!usesDone(fn)) return fn;
+    return function () {
+      var self = this;
+      return new Promise(function (resolve, reject) {
+        var failed = function (error) { reject(error instanceof Error ? error : new Error(error === undefined ? "Failed" : String(error))); };
+        var done = function (error) { if (error instanceof Error) reject(error); else resolve(); };
+        done.fail = failed;
+        try { fn.call(self, done); } catch (error) { reject(error); }
+      });
+    };
+  }
+  function wrapRunner(runner) {
+    if (typeof runner !== "function") return runner;
+    return new Proxy(runner, {
+      apply: function (target, thisArg, args) {
+        return target.apply(thisArg, args.map(withDone));
+      },
+      get: function (target, key) {
+        var value = target[key];
+        return key === "only" || key === "skip" ? wrapRunner(value) : value;
+      },
+    });
+  }
+  ["it", "test", "beforeEach", "afterEach", "beforeAll", "afterAll"].forEach(function (name) {
+    globalThis[name] = wrapRunner(globalThis[name]);
+  });
 
   globalThis.fail = function (error) {
     throw error instanceof Error ? error : new Error(error === undefined ? "Failed" : String(error));
