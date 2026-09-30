@@ -44,6 +44,8 @@ describe("GenerateCommand", () => {
     const component = await readFile(join(dir, "src", "card.component.ts"), "utf8");
     expect(component).toContain('import { Component } from "ngjs-core";');
     expect(component).toContain('selector: "app-card"');
+    // Angular 16: `styleUrls` (array); `styleUrl` es de Angular 17.
+    expect(component).toContain('styleUrls: ["./card.component.css"]');
   });
 
   it("genera una directiva con selector de atributo", async () => {
