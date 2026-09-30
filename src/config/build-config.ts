@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { IndexHtmlOptions } from "@/build/index-html-writer.ts";
-import type { BuildOptions, FileReplacement, NgjsConfig, StyleEntry } from "@/config/cli-config.ts";
+import type { AssetGlob, BuildOptions, FileReplacement, NgjsConfig, OutputHashing, StyleEntry } from "@/config/cli-config.ts";
 import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 
 /** Flags de `ngjs build` (línea de comandos) — lo que NO vive en `ngjs.json`. */
@@ -33,6 +33,10 @@ export class BuildConfig extends NgjsCommandConfig {
     public readonly index: IndexHtmlOptions | undefined,
     /** `styles` de `ngjs.json` tal cual (ver `GlobalStyles`). */
     public readonly styles: (string | StyleEntry)[],
+    /** `assets` de `ngjs.json` tal cual (ver `Assets`); solo los copia una aplicación. */
+    public readonly assets: (string | AssetGlob)[],
+    /** `outputHashing` de `ngjs.json` (default `none`, como Angular). */
+    public readonly outputHashing: OutputHashing,
   ) {
     super();
   }
@@ -60,6 +64,8 @@ export class BuildConfig extends NgjsCommandConfig {
       config.sourceRoot,
       BuildConfig.resolveIndex(config, override.index ?? options.index),
       override.styles ?? options.styles ?? [],
+      override.assets ?? options.assets ?? [],
+      override.outputHashing ?? options.outputHashing ?? "none",
     );
   }
 

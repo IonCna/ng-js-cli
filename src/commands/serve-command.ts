@@ -1,3 +1,4 @@
+import { Assets } from "@/build/assets.ts";
 import { GlobalStyles } from "@/build/global-styles.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { AngularDependencies } from "@/serve/angular-dependencies.ts";
@@ -18,6 +19,9 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
     const templates = TemplateFiles.create({ hashed: false });
     const templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
     const server = await createServer({
+      base: this.config.baseHref,
+      // Como Angular 16: lo estático sale de `assets` (ver `assetsPlugin`), no de un `public/` implícito de Vite.
+      publicDir: false,
       server: {
         port: this.config.port,
         // Vacío != "sin restricción" para Vite — un array vacío bloquea todo host.
@@ -40,7 +44,8 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       plugins: [
         viteTransformPlugin(this.config.sourceRoot, [templateCompiler, templates]) as Plugin,
         ServeCommand.templatesPlugin(templates, templateCompiler),
-        ServeCommand.stylesPlugin(GlobalStyles.from(this.config.styles)),
+        ServeCommand.stylesPlugin(GlobalStyles.from(this.config.styles), this.config.baseHref),
+        ServeCommand.assetsPlugin(Assets.from(this.config.assets, this.config.sourceRoot), this.config.baseHref),
       ],
     });
 
@@ -69,22 +74,33 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
     };
   }
 
+  /** `assets` de `architect.build.options`, como `ng serve`: bajo el `<base href>`, releídos del fuente en cada pedido. */
+  private static assetsPlugin(assets: Assets, baseHref: string): Plugin {
+    return {
+      name: "ngjs-assets",
+      configureServer: (server) => void server.middlewares.use(assets.middleware(baseHref)),
+    };
+  }
+
   /**
    * `styles` de `architect.build.options`, como `ng serve`: un `<link>` por archivo fuente en el `index.html` (Vite
    * los procesa y les da HMR de CSS) y `/<bundleName>.css` para los que se cargan a mano (`inject: false`).
    */
-  private static stylesPlugin(styles: GlobalStyles): Plugin {
+  private static stylesPlugin(styles: GlobalStyles, baseHref: string): Plugin {
+    // Vite sirve todo bajo `base` (el `<base href>`): las URLs de la raíz del proyecto van con ese prefijo.
+    const withBase = (url: string) => `${baseHref}${url.replace(/^\//, "")}`;
     return {
       name: "ngjs-global-styles",
       transformIndexHtml: () =>
         styles.injectedSourceUrls.map((href) => ({
           tag: "link",
-          attrs: { rel: "stylesheet", href },
+          attrs: { rel: "stylesheet", href: withBase(href) },
           injectTo: "head" as const,
         })),
       configureServer: (server) =>
         void server.middlewares.use((request, response, next) => {
-          const css = styles.bundleSource(request.url?.split("?")[0] ?? "");
+          const pathname = request.url?.split("?")[0] ?? "";
+          const css = styles.bundleSource(pathname.startsWith(baseHref) ? `/${pathname.slice(baseHref.length)}` : pathname);
           if (css === undefined) return next();
           response.setHeader("Content-Type", "text/css");
           response.end(css);

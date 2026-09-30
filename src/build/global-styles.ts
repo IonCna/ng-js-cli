@@ -1,5 +1,7 @@
-import { join, relative, resolve, sep } from "node:path";
-import type { StyleEntry } from "@/config/cli-config.ts";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import type { OutputHashing, StyleEntry } from "@/config/cli-config.ts";
 import * as esbuild from "esbuild";
 
 /** Un bundle de `styles` ya resuelto: varias entradas con el mismo `bundleName` salen concatenadas en orden. */
@@ -27,7 +29,7 @@ export class GlobalStyles {
     ),
   );
 
-  /** `url(/img/x.png)`: absoluta al sitio (algo de `public/`), no un archivo a bundlear — queda tal cual. */
+  /** `url(/img/x.png)`: absoluta al sitio (un `assets` publicado), no un archivo a bundlear — queda tal cual. */
   private static readonly SITE_URLS: esbuild.Plugin = {
     name: "ngjs-site-urls",
     setup(build) {
@@ -52,33 +54,72 @@ export class GlobalStyles {
     return new GlobalStyles(root, [...bundles.values()]);
   }
 
-  /** Los `.css` a enlazar en el `index.html` del build (relativos a `outputPath`), en orden. */
+  /** Los `.css` a enlazar en el `index.html` (relativos a `outputPath`), en orden, sin hash — con hash los da `build()`. */
   get injected(): string[] {
     return this.bundles.filter((bundle) => bundle.inject).map((bundle) => `${bundle.name}.css`);
   }
 
-  async build(outputPath: string, options: { minify: boolean; sourceMap: boolean }): Promise<void> {
-    await Promise.all(
-      this.bundles.map((bundle) =>
-        esbuild.build({
+  /**
+   * Bundlea cada grupo en `<outputPath>/<bundleName>.css` y devuelve los que se inyectan (relativos a `outputPath`),
+   * en orden. `outputHashing` (como Angular): `bundles`/`all` → `<bundleName>-<hash>.css`; `media`/`all` → lo que
+   * copian los `url()` sale como `media/<nombre>-<hash>`.
+   */
+  async build(
+    outputPath: string,
+    options: { minify: boolean; sourceMap: boolean; outputHashing?: OutputHashing },
+  ): Promise<string[]> {
+    const hashing = options.outputHashing ?? "none";
+    const hashBundles = hashing === "all" || hashing === "bundles";
+    const hashMedia = hashing === "all" || hashing === "media";
+    const outDir = join(this.root, outputPath);
+
+    const built = await Promise.all(
+      this.bundles.map(async (bundle) => {
+        const outfile = join(outDir, `${bundle.name}.css`);
+        const result = await esbuild.build({
           stdin: {
             contents: bundle.inputs.map((input) => `@import ${JSON.stringify(input)};`).join("\n"),
             resolveDir: this.root,
             sourcefile: `${bundle.name}.css`,
             loader: "css",
           },
-          outfile: join(this.root, outputPath, `${bundle.name}.css`),
+          outfile,
           bundle: true,
           minify: options.minify,
           sourcemap: options.sourceMap,
           loader: GlobalStyles.ASSET_LOADERS,
-          assetNames: "media/[name]-[hash]",
+          assetNames: hashMedia ? "media/[name]-[hash]" : "media/[name]",
           plugins: [GlobalStyles.SITE_URLS],
           charset: "utf8",
           logLevel: "silent",
-        }),
-      ),
+          // Se escribe a mano: con hash, el `.css` cambia de nombre (y su `.map` con él).
+          write: false,
+        });
+
+        const css = result.outputFiles.find((file) => file.path === outfile);
+        const fileName = hashBundles && css ? `${bundle.name}-${GlobalStyles.hash(css.contents)}.css` : `${bundle.name}.css`;
+        for (const file of result.outputFiles) {
+          let target = file.path;
+          let contents: Uint8Array | string = file.contents;
+          if (file.path === outfile) {
+            target = join(outDir, fileName);
+            // El `.css` apunta a su mapa por nombre: sigue al renombre.
+            contents = file.text.replace(`sourceMappingURL=${bundle.name}.css.map`, `sourceMappingURL=${fileName}.map`);
+          } else if (file.path === `${outfile}.map`) {
+            target = join(outDir, `${fileName}.map`);
+          }
+          await mkdir(dirname(target), { recursive: true });
+          await writeFile(target, contents);
+        }
+        return { bundle, fileName };
+      }),
     );
+    return built.filter(({ bundle }) => bundle.inject).map(({ fileName }) => fileName);
+  }
+
+  /** Hash corto del contenido, en mayúsculas como los de esbuild (`chunk-ABCD1234.js`). */
+  private static hash(contents: Uint8Array): string {
+    return createHash("sha256").update(contents).digest("hex").slice(0, 8).toUpperCase();
   }
 
   /** `serve`: la URL con que Vite sirve cada archivo fuente (relativa a la raíz del proyecto). */

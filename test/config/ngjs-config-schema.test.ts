@@ -18,7 +18,8 @@ const validConfig: NgjsConfig = {
         optimization: { scripts: true, styles: false },
         declarations: false,
         index: { input: "src/index.html" },
-        assets: [{ glob: "**/*", input: "src/assets", output: "assets" }],
+        // Como Angular 16: string (dentro de sourceRoot) u objeto `{ glob, input, output }`.
+        assets: ["src/favicon.ico", "src/assets", { glob: "**/*", input: "node_modules/pkg/img", output: "img" }],
         styles: ["src/styles.css", { input: "src/print.css", bundleName: "print", inject: false }],
         budgets: [{ type: "initial", maximumWarning: "500kb" }],
       },

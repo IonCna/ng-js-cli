@@ -1,11 +1,11 @@
 import { watch } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
 import { GlobalStyles } from "@/build/global-styles.ts";
 import { IndexHtmlWriter } from "@/build/index-html-writer.ts";
-import { PublicDir } from "@/build/public-dir.ts";
+import { Assets } from "@/build/assets.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { BuildConfig, type BuildFlags } from "@/config/build-config.ts";
 import * as esbuild from "esbuild";
@@ -77,9 +77,13 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     const styles = GlobalStyles.from(this.config.styles);
     // `--watch` reusa la instancia: cada build publica solo lo que transforma (un componente borrado no queda).
     this.templates?.reset();
-    await Promise.all([
-      ...formats.map((format) => this.buildFormat(format)),
-      styles.build(this.config.outputPath, { minify: this.config.minifyStyles, sourceMap: this.config.sourceMap }),
+    const [results, injectedStyles] = await Promise.all([
+      Promise.all(formats.map((format) => this.buildFormat(format))),
+      styles.build(this.config.outputPath, {
+        minify: this.config.minifyStyles,
+        sourceMap: this.config.sourceMap,
+        outputHashing: this.config.outputHashing,
+      }),
     ]);
 
     await this.templates?.emit(this.config.outputPath);
@@ -87,14 +91,32 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       const manifestPath = join(this.config.outputPath, LibraryManifest.FILE_NAME);
       await writeFile(manifestPath, `${JSON.stringify(this.manifest, null, 2)}\n`);
     }
-    if (this.config.projectType === "application") await PublicDir.copyTo(this.config.outputPath);
+    if (this.config.projectType === "application") {
+      await Assets.from(this.config.assets, this.config.sourceRoot).copyTo(this.config.outputPath);
+    }
     if (this.config.index) {
-      await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index, styles.injected).write();
+      const bundleFiles = this.entryFiles(results[0]!);
+      await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index, injectedStyles, bundleFiles).write();
     }
     if (declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
   }
 
-  private buildFormat(format: Format): Promise<esbuild.BuildResult> {
+  /** Nombre de entry → el `.js` que emitió esbuild (relativo a `outputPath`): con `outputHashing` lleva hash. */
+  private entryFiles(result: esbuild.BuildResult<{ metafile: true }>): Record<string, string> {
+    const sources = new Map(Object.entries(this.config.entryPoints).map(([name, source]) => [resolve(source), name]));
+    const files: Record<string, string> = {};
+    for (const [output, meta] of Object.entries(result.metafile.outputs)) {
+      const name = meta.entryPoint && sources.get(resolve(meta.entryPoint));
+      if (name && output.endsWith(".js")) files[name] = relative(this.config.outputPath, output).split(sep).join("/");
+    }
+    return files;
+  }
+
+  private buildFormat(format: Format): Promise<esbuild.BuildResult<{ metafile: true }>> {
+    // `outputHashing` (como Angular): los `.js` de entrada con hash; los chunks lazy ya lo llevan. Solo una aplicación:
+    // una librería publica sus entradas con nombre fijo (`exports` del `package.json`).
+    const hashBundles =
+      this.config.projectType === "application" && (this.config.outputHashing === "all" || this.config.outputHashing === "bundles");
     const fileReplacements = Object.fromEntries(
       this.config.fileReplacements.map(({ replace, with: withPath }) => [resolve(replace), resolve(withPath)]),
     );
@@ -103,6 +125,8 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       entryPoints: this.config.entryPoints,
       outdir: this.config.outputPath,
       outExtension: format === "cjs" ? { ".js": ".cjs" } : undefined,
+      entryNames: hashBundles ? "[name]-[hash]" : "[name]",
+      metafile: true,
       bundle: true,
       format,
       // Varios entry points (subpaths de una librería) comparten módulos: sin `splitting` cada entry trae su propia

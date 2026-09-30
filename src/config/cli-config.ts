@@ -38,6 +38,12 @@ export interface BuildOptions {
   external?: string[];
   sourceMap?: boolean;
   optimization?: boolean | { scripts?: boolean; styles?: boolean };
+  /**
+   * Como Angular 16: hash del contenido en el nombre de lo que emite el build, para que un deploy nuevo no choque con
+   * la caché del navegador. `bundles`: los `.js` de entrada y los estilos globales (`main-<hash>.js`); `media`: lo que
+   * copian los estilos (`media/<nombre>-<hash>.woff2`); `all`: los dos. Default `none`. Los chunks lazy siempre llevan hash.
+   */
+  outputHashing?: OutputHashing;
   /** Swap de archivos por configuration — la pieza de "environments". */
   fileReplacements?: FileReplacement[];
   /** Solo `projectType: "library"` — además del bundle, corre `tsc` para `.d.ts`. */
@@ -47,12 +53,18 @@ export interface BuildOptions {
 
   // --- Solo `projectType: "application"` (consumo final en browser) ---
   index?: { input: string; output?: string };
-  assets?: AssetGlob[];
+  /**
+   * Archivos estáticos, como Angular 16: `"src/assets"`/`"src/favicon.ico"` (dentro de `sourceRoot`, se publican con
+   * su ruta desde ahí) o `{ glob, input, output, ignore? }`. `build` los copia a `outputPath`; `serve` los sirve.
+   */
+  assets?: (string | AssetGlob)[];
   /** Estilos globales, como Angular real: `"src/styles.css"` o `{ input, bundleName?, inject? }`. También en `serve`. */
   styles?: (string | StyleEntry)[];
   scripts?: StyleEntry[];
   budgets?: Budget[];
 }
+
+export type OutputHashing = "none" | "all" | "media" | "bundles";
 
 export interface FileReplacement {
   replace: string;

@@ -22,8 +22,10 @@ export class IndexHtmlWriter {
     private readonly entryPoints: Record<string, string>,
     private readonly outputPath: string,
     private readonly options: IndexHtmlOptions,
-    /** `.css` relativos a `outputPath` (`GlobalStyles.injected`). */
+    /** `.css` relativos a `outputPath` (`GlobalStyles.build()`). */
     private readonly styles: string[],
+    /** Nombre de entry → `.js` que emitió esbuild (relativo a `outputPath`); sin entrada, `<nombre>.js`. */
+    private readonly bundleFiles: Record<string, string>,
   ) {}
 
   static from(
@@ -31,8 +33,9 @@ export class IndexHtmlWriter {
     outputPath: string,
     options: IndexHtmlOptions,
     styles: string[] = [],
+    bundleFiles: Record<string, string> = {},
   ): IndexHtmlWriter {
-    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles);
+    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles, bundleFiles);
   }
 
   async write(): Promise<void> {
@@ -73,7 +76,7 @@ export class IndexHtmlWriter {
   private bundlesBySource(): Map<string, string> {
     const prefix = this.prefix();
     return new Map(
-      Object.entries(this.entryPoints).map(([name, source]) => [resolve(this.root, source), `${prefix}${name}.js`]),
+      Object.entries(this.entryPoints).map(([name, source]) => [resolve(this.root, source), `${prefix}${this.bundleFiles[name] ?? `${name}.js`}`]),
     );
   }
 

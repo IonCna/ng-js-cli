@@ -52,8 +52,30 @@ describe("GlobalStyles", () => {
       const css = await readFile(join(dir, "dist", "styles.css"), "utf8");
       expect(css).toContain(".title {");
       expect(css.indexOf(".title")).toBeLessThan(css.indexOf("body {"));
-      expect(css).toMatch(/url\("\.\/media\/bg-[A-Z0-9]+\.svg"\)/);
+      // Sin `outputHashing` (default `none`, como Angular): nombres fijos.
+      expect(css).toContain('url("./media/bg.svg")');
       expect(css).toContain("url(/logo.png)");
+    });
+
+    it("outputHashing: 'all' → styles-<hash>.css y media con hash; build() devuelve el nombre a enlazar", async () => {
+      const injected = await GlobalStyles.from(["src/style.css"], dir).build("dist", {
+        minify: false,
+        sourceMap: true,
+        outputHashing: "all",
+      });
+      expect(injected).toHaveLength(1);
+      expect(injected[0]).toMatch(/^styles-[A-F0-9]{8}\.css$/);
+      const css = await readFile(join(dir, "dist", injected[0]!), "utf8");
+      expect(css).toMatch(/url\("\.\/media\/bg-[A-Z0-9]+\.svg"\)/);
+      // El mapa sigue al renombre.
+      expect(css).toContain(`sourceMappingURL=${injected[0]}.map`);
+      await expect(readFile(join(dir, "dist", `${injected[0]}.map`), "utf8")).resolves.toContain('"version"');
+    });
+
+    it("outputHashing: 'bundles' → solo el .css lleva hash, la media no", async () => {
+      const [file] = await GlobalStyles.from(["src/style.css"], dir).build("dist", { minify: false, sourceMap: false, outputHashing: "bundles" });
+      expect(file).toMatch(/^styles-[A-F0-9]{8}\.css$/);
+      expect(await readFile(join(dir, "dist", file!), "utf8")).toContain('url("./media/bg.svg")');
     });
   });
 });

@@ -5,6 +5,14 @@ describe("IndexHtmlWriter.transform()", () => {
   const writer = (output = "index.html") =>
     IndexHtmlWriter.from({ index: "src/index.ts" }, "dist", { input: "index.html", output });
 
+  it("con outputHashing usa el .js que emitió esbuild (con hash)", () => {
+    const hashed = IndexHtmlWriter.from({ index: "src/index.ts" }, "dist", { input: "index.html", output: "index.html" }, [], {
+      index: "index-ABCD1234.js",
+    });
+    const html = `<body>\n<script type="module" src="/src/index.ts"></script>\n</body>`;
+    expect(hashed.transform(html)).toBe(`<body>\n<script type="module" src="index-ABCD1234.js"></script>\n</body>`);
+  });
+
   it("reescribe el script del entry fuente (el de Vite) al bundle, conservando sus atributos", () => {
     const html = `<body>\n<script type="module" src="/src/index.ts"></script>\n</body>`;
     expect(writer().transform(html)).toBe(`<body>\n<script type="module" src="index.js"></script>\n</body>`);
