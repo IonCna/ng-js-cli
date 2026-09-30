@@ -75,6 +75,8 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
   async run({ declarations = this.config.declarations }: { declarations?: boolean } = {}): Promise<void> {
     const formats: Format[] = this.config.dualFormat ? ["esm", "cjs"] : ["esm"];
     const styles = GlobalStyles.from(this.config.styles);
+    // `--watch` reusa la instancia: cada build publica solo lo que transforma (un componente borrado no queda).
+    this.templates?.reset();
     await Promise.all([
       ...formats.map((format) => this.buildFormat(format)),
       styles.build(this.config.outputPath, { minify: this.config.minifyStyles, sourceMap: this.config.sourceMap }),
