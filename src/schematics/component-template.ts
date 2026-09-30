@@ -22,7 +22,7 @@ export class ComponentTemplate {
 @Component({
   selector: "${this.selector}",
   templateUrl: "./${this.fileBase}.component.html",
-  styleUrl: "./${this.fileBase}.component.css",
+  styleUrls: ["./${this.fileBase}.component.css"],
 })
 export class ${this.className} {}
 `;

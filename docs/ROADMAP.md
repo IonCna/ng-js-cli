@@ -165,6 +165,13 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `module` nuevo solo va a `imports` de otro con `--module <path>`.
       `--skip-import` no registra. Service no se registra en ningún módulo: se
       genera con `@Injectable({ providedIn: "root" })`.
+- [x] **Metadata del objeto del decorador (Angular 16).** `inputs`/`outputs`/`host`/`queries` se leen como sus
+      decoradores de miembro (`host` traduce sus expresiones con `HostExpression`: identificadores libres →
+      `instance.x`, `$event` → el evento; sin pipes ni funciones). `@Input({ transform })` se estampa en la clase
+      que lo declara (`ɵinputTransforms`) y el factory convierte el input en un accessor de la instancia (también
+      heredado de otro archivo; `ngOnChanges` ve los valores transformados). `required` lo valida
+      `ng-js-template-compiler` en los templates. `styleUrls`/`styles` los lee `ng-js-vite`; `generate component`
+      emite `styleUrls`.
 - [ ] **Cobertura del compilador — lo que falta:**
   - DI: herencia desde una base de OTRO paquete (no está en el escaneo del
     proyecto) no se resuelve en build. Inyectar una directiva/componente del
