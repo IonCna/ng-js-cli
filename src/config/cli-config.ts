@@ -39,6 +39,11 @@ export interface BuildOptions {
   /** Clave = ruta de salida bajo `outputPath` (sin extensión); valor = entry point fuente. */
   entryPoints: Record<string, string>;
   outputPath: string;
+  /**
+   * Como Angular: borra `outputPath` antes de buildear (con `--watch`, solo antes del primer build) — sin esto, cada
+   * build con `outputHashing` deja los `main-<hash>.js`/`styles-<hash>.css` anteriores. Default `true`.
+   */
+  deleteOutputPath?: boolean;
   /** Paquetes que no se bundlean (quedan como `import`/`require` externos). */
   external?: string[];
   sourceMap?: boolean;
@@ -102,7 +107,15 @@ export interface Budget {
 }
 
 export interface ServeTarget {
-  options?: { port?: number; allowedHosts?: string[] };
+  options?: {
+    port?: number;
+    allowedHosts?: string[];
+    /**
+     * Como `proxyConfig` de `ng serve`: ruta (desde la raíz del proyecto) a un JSON `{ "<contexto>": { target, … } }`
+     * o `.js`/`.mjs`/`.cjs` — ver `ProxyConfiguration`.
+     */
+    proxyConfig?: string;
+  };
   configurations?: Record<string, Partial<NonNullable<ServeTarget["options"]>>>;
 }
 export interface TestTarget {

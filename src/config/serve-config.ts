@@ -6,6 +6,8 @@ import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 /** Flags de `ngjs serve` (línea de comandos) — pisan lo que haya en `architect.serve.options`. */
 export interface ServeFlags {
   port?: number;
+  /** `--proxy-config <path>` — pisa `architect.serve.options.proxyConfig`. */
+  proxyConfig?: string;
 }
 
 export class ServeConfig extends NgjsCommandConfig {
@@ -23,6 +25,8 @@ export class ServeConfig extends NgjsCommandConfig {
     public readonly baseHref: string,
     /** Como `ng serve`: los `assets` de `architect.build.options`, servidos desde el fuente (ver `Assets`). */
     public readonly assets: (string | AssetGlob)[],
+    /** Ruta del JSON de proxies (`proxyConfig`), si hay — ver `ProxyConfiguration`. */
+    public readonly proxyConfig: string | undefined,
   ) {
     super();
   }
@@ -38,6 +42,7 @@ export class ServeConfig extends NgjsCommandConfig {
       config.architect.build.options.styles ?? [],
       await ServeConfig.readBaseHref(join(process.cwd(), "index.html")),
       config.architect.build.options.assets ?? [],
+      flags.proxyConfig ?? options.proxyConfig,
     );
   }
 

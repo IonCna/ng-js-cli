@@ -24,6 +24,7 @@
     "commander": "^15.0.0",
     "esbuild": "^0.28.1",
     "jsdom": "^30.1.0",
+    "jsonc-parser": "^3.3.1",
     "mrmime": "^2.0.1",
     "ng-js-compiler": "link:ng-js-compiler",
     "ng-js-template-compiler": "link:ng-js-template-compiler",

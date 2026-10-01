@@ -3,6 +3,7 @@ import { GlobalStyles } from "@/build/global-styles.ts";
 import { PostcssConfiguration } from "@/build/postcss-configuration.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { AngularDependencies } from "@/serve/angular-dependencies.ts";
+import { ProxyConfiguration } from "@/serve/proxy-configuration.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
 import { viteTransformPlugin } from "ng-js-compiler/vite";
 import { TemplateCompiler } from "ng-js-template-compiler";
@@ -20,15 +21,19 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
     const templates = TemplateFiles.create({ hashed: false });
     const templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
     const postcss = await PostcssConfiguration.load();
+    const proxy = await ProxyConfiguration.load(process.cwd(), this.config.proxyConfig);
     const server = await createServer({
       base: this.config.baseHref,
       // Como Angular 16: lo estático sale de `assets` (ver `assetsPlugin`), no de un `public/` implícito de Vite.
       publicDir: false,
       server: {
         port: this.config.port,
+        // Como `ng serve`: puerto ocupado es error, no otro puerto en silencio (un backend apunta a este).
+        strictPort: true,
         // Vacío != "sin restricción" para Vite — un array vacío bloquea todo host.
         // Sin overrides propios, mejor dejar que Vite use su default.
         allowedHosts: this.config.allowedHosts.length ? this.config.allowedHosts : undefined,
+        proxy,
       },
       // `angular` es CommonJS (`module.exports = angular`): Vite lo tiene que pre-bundlear (`optimizeDeps`) para
       // que exista el `import angular from "angular"` que emite `ModuleWriter`. `dedupe`: una librería enlazada

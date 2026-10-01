@@ -1,5 +1,5 @@
 import { watch } from "node:fs";
-import { writeFile } from "node:fs/promises";
+import { readdir, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join, relative, resolve, sep } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
@@ -36,6 +36,31 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
 
   /** Librería: lo que publica en `ngjs-manifest.json` (ver `LibraryManifest`), del escaneo del build. */
   private manifest?: NgjsManifest;
+
+  /**
+   * `deleteOutputPath`, como `deleteOutputDir` de Angular: vacía `outputPath` antes del build (con `--watch`, solo
+   * antes del primero). Borra el contenido y no la carpeta (puede estar montada o ser un symlink); la raíz del
+   * proyecto es error.
+   */
+  async clean(): Promise<void> {
+    if (!this.config.deleteOutputPath) return;
+
+    const root = process.cwd();
+    const outputPath = resolve(root, this.config.outputPath);
+    if (outputPath === root) throw new Error("Output path MUST not be project root directory!");
+
+    let entries: string[];
+    try {
+      entries = await readdir(outputPath);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "ENOENT") return;
+      throw error;
+    }
+
+    for (const entry of entries) {
+      await rm(join(outputPath, entry), { force: true, recursive: true, maxRetries: 3 });
+    }
+  }
 
   /**
    * `ngjs build --watch`: un build completo y después, con cada cambio bajo `sourceRoot` (agrupados, uno a la vez),
@@ -192,6 +217,7 @@ class SingletonPackages {
 export async function runBuildCommand(flags: BuildFlags): Promise<void> {
   const config = await BuildConfig.create(flags);
   const cmd = BuildCommand.from(config);
+  await cmd.clean();
   if (flags.watch) await cmd.watch();
   else await cmd.run();
 }

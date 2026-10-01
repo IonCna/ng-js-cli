@@ -52,6 +52,7 @@ program
   .command(serveCommandDefinition.name)
   .alias(serveCommandDefinition.alias)
   .option("-p, --port <port>", "puerto del dev-server", Number)
+  .option("--proxy-config <path>", "JSON de proxies hacia el backend (como ng serve)")
   .action(runServeCommand);
 
 program

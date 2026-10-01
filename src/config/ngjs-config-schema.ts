@@ -34,6 +34,7 @@ const budgetSchema = z.object({
 const buildOptionsSchema = z.object({
   entryPoints: z.record(z.string(), z.string()),
   outputPath: z.string(),
+  deleteOutputPath: z.boolean().optional(),
   external: z.array(z.string()).optional(),
   sourceMap: z.boolean().optional(),
   optimization: z.union([z.boolean(), z.object({ scripts: z.boolean().optional(), styles: z.boolean().optional() })]).optional(),
@@ -57,6 +58,7 @@ const buildTargetSchema = z.object({
 const serveTargetOptionsSchema = z.object({
   port: z.number().optional(),
   allowedHosts: z.array(z.string()).optional(),
+  proxyConfig: z.string().optional(),
 });
 
 const serveTargetSchema = z.object({

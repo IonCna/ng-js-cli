@@ -16,6 +16,8 @@ export class BuildConfig extends NgjsCommandConfig {
   private constructor(
     public readonly entryPoints: Record<string, string>,
     public readonly outputPath: string,
+    /** `deleteOutputPath` de `ngjs.json` (default `true`, como Angular) — ver `BuildCommand.clean`. */
+    public readonly deleteOutputPath: boolean,
     public readonly external: string[],
     public readonly sourceMap: boolean,
     public readonly minify: boolean,
@@ -55,6 +57,7 @@ export class BuildConfig extends NgjsCommandConfig {
     return new BuildConfig(
       override.entryPoints ?? options.entryPoints,
       override.outputPath ?? options.outputPath,
+      override.deleteOutputPath ?? options.deleteOutputPath ?? true,
       override.external ?? options.external ?? [],
       override.sourceMap ?? options.sourceMap ?? false,
       minify,

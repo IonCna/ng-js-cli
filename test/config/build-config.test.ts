@@ -100,6 +100,20 @@ describe("BuildConfig.create()", () => {
     expect((await BuildConfig.create({})).deployUrl).toBe("https://cdn.example/app/");
   });
 
+  it("deleteOutputPath: true por default (como Angular); ngjs.json lo puede apagar", async () => {
+    expect((await BuildConfig.create({})).deleteOutputPath).toBe(true);
+
+    const config: NgjsConfig = {
+      version: "1",
+      root: ".",
+      projectType: "application",
+      sourceRoot: "src",
+      architect: { build: { options: { entryPoints: { main: "src/main.ts" }, outputPath: "dist", deleteOutputPath: false } } },
+    };
+    await writeFile(join(dir, "ngjs.json"), JSON.stringify(config));
+    expect((await BuildConfig.create({})).deleteOutputPath).toBe(false);
+  });
+
   describe("index (solo application)", () => {
     const writeConfig = async (projectType: NgjsConfig["projectType"], index?: { input: string; output?: string }) => {
       const config: NgjsConfig = {
