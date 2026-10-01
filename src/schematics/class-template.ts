@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 export class ClassTemplate {
   private constructor(
@@ -8,16 +7,27 @@ export class ClassTemplate {
     public readonly className: string,
   ) {}
 
-  static from(name: string): ClassTemplate {
-    const fileBase = CaseTransform.toKebabCase(name);
+  /** `--type model` → `user.model.ts`; la clase sigue siendo `User`, como Angular. */
+  static from(name: string, type = ""): ClassTemplate {
+    const fileBase = ClassTemplate.fileBase(name, type);
     return new ClassTemplate(fileBase, CaseTransform.toPascalCase(name));
+  }
+
+  private static fileBase(name: string, type: string): string {
+    const dasherized = CaseTransform.toKebabCase(name);
+    return type ? `${dasherized}.${CaseTransform.toKebabCase(type)}` : dasherized;
   }
 
   toString(): string {
     return `export class ${this.className} {}\n`;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    return {
+      kind: "class",
+      className: this.className,
+      fileName: this.fileBase,
+      files: [{ name: `${this.fileBase}.ts`, content: this.toString() }],
+    };
   }
 }

@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 export class EnumTemplate {
   private constructor(
@@ -8,16 +7,26 @@ export class EnumTemplate {
     public readonly enumName: string,
   ) {}
 
-  static from(name: string): EnumTemplate {
-    const fileBase = CaseTransform.toKebabCase(name);
-    return new EnumTemplate(fileBase, CaseTransform.toPascalCase(name));
+  /** `--type` solo cambia el archivo (`role.enum.ts`), como Angular. */
+  static from(name: string, type = ""): EnumTemplate {
+    return new EnumTemplate(EnumTemplate.fileBase(name, type), CaseTransform.toPascalCase(name));
+  }
+
+  private static fileBase(name: string, type: string): string {
+    const dasherized = CaseTransform.toKebabCase(name);
+    return type ? `${dasherized}.${CaseTransform.toKebabCase(type)}` : dasherized;
   }
 
   toString(): string {
     return `export enum ${this.enumName} {}\n`;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    return {
+      kind: "enum",
+      className: this.enumName,
+      fileName: this.fileBase,
+      files: [{ name: `${this.fileBase}.ts`, content: this.toString() }],
+    };
   }
 }

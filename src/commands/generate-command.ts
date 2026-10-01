@@ -1,9 +1,11 @@
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname, join, relative, sep } from "node:path";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
-import { GenerateConfig } from "@/config/generate-config.ts";
+import { GenerateConfig, type GenerateFlags } from "@/config/generate-config.ts";
+import { CaseTransform } from "@/schematics/case-transform.ts";
 import { ModuleRegistrar } from "@/schematics/module-registrar.ts";
-import { resolveSchematic, type SchematicKind } from "@/schematics/schematic-registry.ts";
+import { resolveSchematic, type SchematicKind, type SchematicOptions } from "@/schematics/schematic-registry.ts";
 import { SpecTemplate } from "@/schematics/spec-template.ts";
 
 export class GenerateCommand extends NgjsCommand<GenerateConfig> {
@@ -11,6 +13,10 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
     return new GenerateCommand(config);
   }
 
+  /**
+   * Como `ng generate`: arma todos los cambios primero (archivos nuevos + el módulo actualizado) y recién después
+   * escribe — un error (módulo que no está, archivo que ya existe) no deja nada a medias. Imprime `CREATE`/`UPDATE`.
+   */
   async run(): Promise<void> {
     const schematic = resolveSchematic(this.config.schematic);
     if (!schematic) {
@@ -18,56 +24,62 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
         `Schematic desconocido: "${this.config.schematic}" (esperaba component/directive/pipe/service/module/class/interface/enum/guard/resolver/interceptor, o sus alias c/d/p/s/m/cl/i/e/g/r/itc).`,
       );
     }
+    const options = schematic.options(this.config.configuredOptions(schematic.kind), this.config.options);
 
-    const { dir, name } = this.resolveTarget();
-    const modulePath = await this.findModule(dir, name, schematic.kind);
+    // `feature/card` → `<path>/feature`, nombre `card`; sin `--flat`, en su propia carpeta (`<path>/feature/card`).
+    const segments = this.config.name.split("/");
+    const name = segments.pop()!;
+    const parentDir = join(this.config.path, ...segments);
+    const dir = options.flat ? parentDir : join(parentDir, CaseTransform.toKebabCase(name));
 
-    await mkdir(dir, { recursive: true });
-    const generated = await schematic.generate(name, dir, { prefix: this.config.prefix });
-    if (!this.config.skipTests) await SpecTemplate.for(generated)?.write(dir);
-    if (modulePath) await ModuleRegistrar.register(modulePath, generated, dir);
+    const modulePath = await this.findModule(dir, schematic.kind, options);
+    const generated = schematic.generate(name, options, this.config.prefix);
+    const spec = options.skipTests ? undefined : SpecTemplate.for(generated)?.file();
+
+    const changes = [...generated.files, ...(spec ? [spec] : [])].map((file) => ({ path: join(dir, file.name), content: file.content }));
+    const existing = changes.filter((change) => existsSync(change.path));
+    if (existing.length && !this.config.force) {
+      throw new Error(`Ya existe ${existing.map((change) => `"${change.path}"`).join(", ")}. Usá --force para sobrescribir.`);
+    }
+    if (modulePath) {
+      changes.push({
+        path: modulePath,
+        content: await ModuleRegistrar.register(modulePath, generated, dir, { exported: options.export }),
+      });
+    }
+
+    for (const change of changes) {
+      const action = existsSync(change.path) ? "UPDATE" : "CREATE";
+      console.log(`${action} ${relative(process.cwd(), change.path).split(sep).join("/")} (${Buffer.byteLength(change.content)} bytes)`);
+      if (this.config.dryRun) continue;
+      await mkdir(dirname(change.path), { recursive: true });
+      await writeFile(change.path, change.content, "utf8");
+    }
+    if (this.config.dryRun) console.log(`\nNOTA: con --dry-run no se escribió nada.`);
   }
 
   /**
-   * Se busca ANTES de escribir: si no hay módulo donde registrar, falla sin dejar archivos sueltos.
-   * Como `ng generate`: los declarables van al módulo más cercano (o al de `--module`); un `module`
-   * nuevo solo se importa en otro si se pasa `--module`.
+   * Como `ng generate`: los declarables van al módulo más cercano (o al de `--module`); un `module` nuevo solo se
+   * importa en otro si se pasa `--module`. Se busca hasta la raíz del proyecto.
    */
-  private async findModule(dir: string, name: string, kind: SchematicKind): Promise<string | undefined> {
-    if (this.config.skipImport || !ModuleRegistrar.propertyFor(kind)) return undefined;
-    if (this.config.module) return ModuleRegistrar.locate(this.config.module, dir, this.config.sourceRoot);
+  private async findModule(dir: string, kind: SchematicKind, options: SchematicOptions): Promise<string | undefined> {
+    if (options.skipImport || !ModuleRegistrar.propertyFor(kind)) return undefined;
+    if (options.module) return ModuleRegistrar.locate(options.module, this.config.path, this.config.name, process.cwd());
     if (kind === "module") return undefined;
 
-    const modulePath = await ModuleRegistrar.find(dir, this.config.sourceRoot);
+    const modulePath = await ModuleRegistrar.find(dir, process.cwd());
     if (!modulePath) {
       throw new Error(
-        `No se encontró ningún módulo (*.module.ts) desde "${dir}" hasta "${this.config.sourceRoot}" donde registrar "${name}". Usá --skip-import para no registrarlo.`,
+        `No se encontró ningún módulo (*.module.ts) desde "${dir}" hacia arriba donde registrar "${this.config.name}". Usá --skip-import para no registrarlo.`,
       );
     }
     return modulePath;
   }
-
-  /** `feature/card` → escribe en `<sourceRoot>/feature`, con nombre base `card`. */
-  private resolveTarget(): { dir: string; name: string } {
-    const segments = this.config.name.split("/");
-    const name = segments.pop()!;
-    return { dir: join(this.config.sourceRoot, ...segments), name };
-  }
 }
 
 /** Lo que `commander` invoca en `.action(...)` — todo lo que necesita para registrar el comando vive acá al lado. */
-export async function runGenerateCommand(
-  schematic: string,
-  name: string,
-  options: { skipImport?: boolean; module?: string; skipTests?: boolean },
-): Promise<void> {
-  const config = await GenerateConfig.create({
-    schematic,
-    name,
-    skipImport: options.skipImport,
-    module: options.module,
-    skipTests: options.skipTests,
-  });
+export async function runGenerateCommand(schematic: string, name: string, options: Omit<GenerateFlags, "schematic" | "name">): Promise<void> {
+  const config = await GenerateConfig.create({ ...options, schematic, name });
   const cmd = GenerateCommand.from(config);
   await cmd.run();
 }

@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 /** `ResolveFn<T>` — funcional, como Angular 15+ (`ngjs-core/router`, ver `route.ts`). */
 export class ResolverTemplate {
@@ -23,7 +22,8 @@ export const ${this.resolverName}: ResolveFn<unknown> = (route: ActivatedRouteSn
 `;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.resolver.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    const fileName = `${this.fileBase}.resolver`;
+    return { kind: "resolver", className: this.resolverName, fileName, files: [{ name: `${fileName}.ts`, content: this.toString() }] };
   }
 }

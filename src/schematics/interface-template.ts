@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 export class InterfaceTemplate {
   private constructor(
@@ -8,16 +7,26 @@ export class InterfaceTemplate {
     public readonly interfaceName: string,
   ) {}
 
-  static from(name: string): InterfaceTemplate {
-    const fileBase = CaseTransform.toKebabCase(name);
-    return new InterfaceTemplate(fileBase, CaseTransform.toPascalCase(name));
+  /** Como Angular: `--prefix` va delante del nombre (`IUser`), `--type` solo cambia el archivo (`user.model.ts`). */
+  static from(name: string, prefix = "", type = ""): InterfaceTemplate {
+    return new InterfaceTemplate(InterfaceTemplate.fileBase(name, type), `${prefix}${CaseTransform.toPascalCase(name)}`);
+  }
+
+  private static fileBase(name: string, type: string): string {
+    const dasherized = CaseTransform.toKebabCase(name);
+    return type ? `${dasherized}.${CaseTransform.toKebabCase(type)}` : dasherized;
   }
 
   toString(): string {
     return `export interface ${this.interfaceName} {}\n`;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    return {
+      kind: "interface",
+      className: this.interfaceName,
+      fileName: this.fileBase,
+      files: [{ name: `${this.fileBase}.ts`, content: this.toString() }],
+    };
   }
 }

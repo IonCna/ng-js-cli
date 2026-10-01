@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 export class DirectiveTemplate {
   private constructor(
@@ -10,9 +9,10 @@ export class DirectiveTemplate {
     public readonly registerName: string,
   ) {}
 
-  static from(name: string, prefix = "app"): DirectiveTemplate {
+  /** Como Angular: `--selector` tal cual, o `<prefix>-<nombre>` en camelCase (sin prefix, solo el nombre). */
+  static from(name: string, { prefix, selector }: { prefix?: string; selector?: string } = {}): DirectiveTemplate {
     const fileBase = CaseTransform.toKebabCase(name);
-    const registerName = CaseTransform.toCamelCase(`${prefix}-${fileBase}`);
+    const registerName = selector ?? CaseTransform.toCamelCase(prefix ? `${prefix}-${fileBase}` : fileBase);
     return new DirectiveTemplate(fileBase, `${CaseTransform.toPascalCase(name)}Directive`, registerName);
   }
 
@@ -26,7 +26,8 @@ export class ${this.className} {}
 `;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.directive.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    const fileName = `${this.fileBase}.directive`;
+    return { kind: "directive", className: this.className, fileName, files: [{ name: `${fileName}.ts`, content: this.toString() }] };
   }
 }

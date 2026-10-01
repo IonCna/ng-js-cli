@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 export class ModuleTemplate {
   private constructor(
@@ -25,7 +24,8 @@ export class ${this.className} {}
 `;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.module.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    const fileName = `${this.fileBase}.module`;
+    return { kind: "module", className: this.className, fileName, files: [{ name: `${fileName}.ts`, content: this.toString() }] };
   }
 }

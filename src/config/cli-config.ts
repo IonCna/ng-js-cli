@@ -8,8 +8,13 @@ export interface NgjsConfig {
    */
   projectType: "application" | "library";
   sourceRoot: string;
-  /** Prefijo de selector de componentes/directivas — informativo por ahora, sin lint todavía. */
+  /** Prefijo de selector de componentes/directivas — `ngjs generate` lo usa como Angular; sin él, selector sin prefijo. */
   prefix?: string;
+  /**
+   * Defaults de `ngjs generate`, como `schematics` de un proyecto en `angular.json`: la clave es
+   * `"@schematics/angular:<schematic>"` y el valor, sus opciones (`{ "style": "none", "skipTests": true }`).
+   */
+  schematics?: Record<string, Record<string, unknown>>;
   architect: {
     build: BuildTarget;
     /** Solo tiene sentido para `projectType: "application"` (fase 2, dev-server con Vite + `ng-js-vite`). */
@@ -53,6 +58,12 @@ export interface BuildOptions {
 
   // --- Solo `projectType: "application"` (consumo final en browser) ---
   index?: { input: string; output?: string };
+  /**
+   * Como `deployUrl` de Angular: URL (absoluta o de origen, `/Client/dist/`) donde quedan publicados los archivos del
+   * build, aparte del `<base href>` que usa el router. Prefija los `<script>`/`<link>` del `index.html` y los
+   * `templateUrl` de los componentes; sin él, todo queda relativo al `<base href>`.
+   */
+  deployUrl?: string;
   /**
    * Archivos estáticos, como Angular 16: `"src/assets"`/`"src/favicon.ico"` (dentro de `sourceRoot`, se publican con
    * su ruta desde ahí) o `{ glob, input, output, ignore? }`. `build` los copia a `outputPath`; `serve` los sirve.

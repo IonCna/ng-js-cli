@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 export class PipeTemplate {
   private constructor(
@@ -28,7 +27,8 @@ export class ${this.className} implements PipeTransform {
 `;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.pipe.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    const fileName = `${this.fileBase}.pipe`;
+    return { kind: "pipe", className: this.className, fileName, files: [{ name: `${fileName}.ts`, content: this.toString() }] };
   }
 }

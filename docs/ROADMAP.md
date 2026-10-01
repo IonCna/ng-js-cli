@@ -160,7 +160,7 @@ consumidor de este contrato, no al revés. Probado con tests de integración
 
 - [x] **Auto-registro en `generate`.** Como `ng generate`: component/directive/
       pipe van a `declarations` del `*.module.ts` más cercano (subiendo hasta
-      `sourceRoot`, ignorando `-routing.module.ts`) con su `import`; falla antes
+      la raíz del proyecto, ignorando `-routing.module.ts`; `--export` también a `exports`) con su `import`; falla antes
       de escribir si no hay módulo o si hay más de uno en la misma carpeta. Un
       `module` nuevo solo va a `imports` de otro con `--module <path>`.
       `--skip-import` no registra. Service no se registra en ningún módulo: se
@@ -217,6 +217,17 @@ consumidor de este contrato, no al revés. Probado con tests de integración
       `ResolveFn` de `ngjs-core/router`) + interceptor (clase, `implements
       HttpInterceptor` de la raíz `ngjs-core` — sin subpath propio para http).
       Aliases: `cl`/`i`/`e`/`g`/`r`/`itc`.
+- [x] **`generate` alineado con `ng generate` (Angular 16).** Base `<sourceRoot>/app` (`/lib` en una librería,
+      `--path` la cambia); component/module en su propia carpeta salvo `--flat`. Opciones con los nombres de
+      Angular: `--style css|none` (scss/sass/less no: nada los compila), `-s`/`-t` inline, `-b` display-block,
+      `--selector`, `-p`/`--prefix` (sin `prefix` en `ngjs.json`, selector sin prefijo), `--type`, `--export`,
+      `-d`/`--dry-run`, `-f`/`--force` (sin él, un archivo existente es error). Imprime `CREATE`/`UPDATE`.
+      Defaults en `schematics["@schematics/angular:<schematic>"]` de `ngjs.json`; una opción que el schematic no
+      tiene es error (flag o config). Fuera: `--standalone`, `--skip-selector` (el compilador exige selector),
+      `--routing` de module, `--implements`/`--functional` de guard/resolver/interceptor.
+- [x] **PostCSS / Tailwind (como Angular).** `postcss.config.json` o `.postcssrc.json` en la raíz → los estilos
+      globales pasan por sus plugins en `build`/`--watch`/`serve` (Tailwind 4: `{ "plugins": { "@tailwindcss/postcss": {} } }`).
+      Falta: estilos de componente y `tailwind.config.js` (Tailwind 3).
 - [x] **`ngjs test` (como `ng test`).** Vitest + jsdom desde el CLI, sin
       `vitest.config.ts` en el proyecto: specs (`architect.test.options.include`,
       default `<sourceRoot>/**/*.spec.ts`) compilados con `viteTransformPlugin`,

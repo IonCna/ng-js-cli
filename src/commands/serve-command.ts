@@ -1,5 +1,6 @@
 import { Assets } from "@/build/assets.ts";
 import { GlobalStyles } from "@/build/global-styles.ts";
+import { PostcssConfiguration } from "@/build/postcss-configuration.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { AngularDependencies } from "@/serve/angular-dependencies.ts";
 import { ServeConfig, type ServeFlags } from "@/config/serve-config.ts";
@@ -18,6 +19,7 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
     // cada request, así editar un template se ve al recargar.
     const templates = TemplateFiles.create({ hashed: false });
     const templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
+    const postcss = await PostcssConfiguration.load();
     const server = await createServer({
       base: this.config.baseHref,
       // Como Angular 16: lo estático sale de `assets` (ver `assetsPlugin`), no de un `public/` implícito de Vite.
@@ -32,6 +34,9 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // que exista el `import angular from "angular"` que emite `ModuleWriter`. `dedupe`: una librería enlazada
       // (`link:ngjs-core`) resolvería SU copia de `node_modules/angular` — dos AngularJS en la misma página.
       // `tsconfigPaths`: los alias de `compilerOptions.paths` (`@/*`), como `ngjs build` (esbuild) y `ngjs test`.
+      // Como `build` (y Angular): PostCSS solo con `postcss.config.json`/`.postcssrc.json` — inline, así Vite no
+      // busca por su cuenta un `postcss.config.js` que el build ignoraría.
+      css: { postcss: { plugins: postcss?.plugins ?? [] } },
       resolve: { dedupe: ["angular"], tsconfigPaths: true },
       // `angular` y lo que lo requiere, todo desde el arranque — ver `AngularDependencies` (bug de Vite 8 al
       // re-optimizar a mitad de sesión: "does not provide an export named 'n'").

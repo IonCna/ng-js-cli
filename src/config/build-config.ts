@@ -37,6 +37,8 @@ export class BuildConfig extends NgjsCommandConfig {
     public readonly assets: (string | AssetGlob)[],
     /** `outputHashing` de `ngjs.json` (default `none`, como Angular). */
     public readonly outputHashing: OutputHashing,
+    /** `deployUrl` de `ngjs.json`, con `/` final (`""` si no hay) — ver `BuildOptions.deployUrl`. */
+    public readonly deployUrl: string,
   ) {
     super();
   }
@@ -66,7 +68,14 @@ export class BuildConfig extends NgjsCommandConfig {
       override.styles ?? options.styles ?? [],
       override.assets ?? options.assets ?? [],
       override.outputHashing ?? options.outputHashing ?? "none",
+      BuildConfig.normalizeDeployUrl(override.deployUrl ?? options.deployUrl),
     );
+  }
+
+  /** `/Client/dist` → `/Client/dist/`: se concatena tal cual delante de cada archivo publicado. */
+  private static normalizeDeployUrl(deployUrl: string | undefined): string {
+    if (!deployUrl) return "";
+    return deployUrl.endsWith("/") ? deployUrl : `${deployUrl}/`;
   }
 
   /**

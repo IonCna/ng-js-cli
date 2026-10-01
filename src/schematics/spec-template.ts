@@ -1,6 +1,4 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
+import type { GeneratedSchematic, SchematicFile } from "@/schematics/schematic-registry.ts";
 
 /**
  * El `.spec.ts` que `ng generate` escribe junto a cada schematic (el mismo de Angular 16, con `TestBed` de
@@ -21,8 +19,8 @@ export class SpecTemplate {
     return this.body;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.generated.fileName}.spec.ts`), this.body, "utf8");
+  file(): SchematicFile {
+    return { name: `${this.generated.fileName}.spec.ts`, content: this.body };
   }
 
   private static body({ kind, className: name, fileName }: GeneratedSchematic): string | undefined {

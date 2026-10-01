@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
+import type { PostcssConfiguration } from "@/build/postcss-configuration.ts";
 import type { OutputHashing, StyleEntry } from "@/config/cli-config.ts";
 import * as esbuild from "esbuild";
 
@@ -16,6 +17,8 @@ interface StyleBundle {
  * `architect.build.options.styles` — los estilos globales, como Angular real: cada entrada es un path
  * (`"src/styles.css"`) o `{ input, bundleName?, inject? }`. Todas van al bundle `styles` salvo que digan otro
  * `bundleName`; `inject: false` lo emite igual pero sin `<link>` en el `index.html` (se carga a mano).
+ *
+ * Con `postcss.config.json`/`.postcssrc.json` en la raíz (ver `PostcssConfiguration`) pasan por esos plugins — Tailwind.
  *
  * - `build`: esbuild bundlea cada grupo en `<outputPath>/<bundleName>.css` — resuelve `@import` (también de
  *   paquetes: `@import "bootstrap/dist/css/bootstrap.css"`) y copia lo que referencian los `url()` a `media/`.
@@ -62,11 +65,11 @@ export class GlobalStyles {
   /**
    * Bundlea cada grupo en `<outputPath>/<bundleName>.css` y devuelve los que se inyectan (relativos a `outputPath`),
    * en orden. `outputHashing` (como Angular): `bundles`/`all` → `<bundleName>-<hash>.css`; `media`/`all` → lo que
-   * copian los `url()` sale como `media/<nombre>-<hash>`.
+   * copian los `url()` sale como `media/<nombre>-<hash>`. `postcss`: cada `.css` pasa antes por sus plugins.
    */
   async build(
     outputPath: string,
-    options: { minify: boolean; sourceMap: boolean; outputHashing?: OutputHashing },
+    options: { minify: boolean; sourceMap: boolean; outputHashing?: OutputHashing; postcss?: PostcssConfiguration },
   ): Promise<string[]> {
     const hashing = options.outputHashing ?? "none";
     const hashBundles = hashing === "all" || hashing === "bundles";
@@ -89,7 +92,7 @@ export class GlobalStyles {
           sourcemap: options.sourceMap,
           loader: GlobalStyles.ASSET_LOADERS,
           assetNames: hashMedia ? "media/[name]-[hash]" : "media/[name]",
-          plugins: [GlobalStyles.SITE_URLS],
+          plugins: [GlobalStyles.SITE_URLS, ...(options.postcss ? [options.postcss.esbuildPlugin()] : [])],
           charset: "utf8",
           logLevel: "silent",
           // Se escribe a mano: con hash, el `.css` cambia de nombre (y su `.map` con él).

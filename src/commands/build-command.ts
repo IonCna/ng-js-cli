@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { join, relative, resolve, sep } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
 import { GlobalStyles } from "@/build/global-styles.ts";
+import { PostcssConfiguration } from "@/build/postcss-configuration.ts";
 import { IndexHtmlWriter } from "@/build/index-html-writer.ts";
 import { Assets } from "@/build/assets.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
@@ -24,10 +25,14 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
    * Aplicación: templates en archivos aparte (`templates/nombre-<hash>.html`, como `ng-js-vite` en Vite). Librería:
    * inline — un `/templates/...` apuntaría a archivos que la app que la consume no tiene.
    */
-  private readonly templates = this.config.projectType === "application" ? TemplateFiles.create() : undefined;
+  private readonly templates =
+    this.config.projectType === "application" ? TemplateFiles.create({ base: this.config.deployUrl }) : undefined;
 
   /** `disabled="x"` → `ng-disabled="x"` en los templates (ver `ng-js-template-compiler`), antes del scope de `ng-js-vite`. */
   private readonly templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
+
+  /** `postcss.config.json`/`.postcssrc.json` de la raíz, leído una vez (también entre rebuilds de `--watch`). */
+  private readonly postcss = PostcssConfiguration.load();
 
   /** Librería: lo que publica en `ngjs-manifest.json` (ver `LibraryManifest`), del escaneo del build. */
   private manifest?: NgjsManifest;
@@ -83,6 +88,7 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
         minify: this.config.minifyStyles,
         sourceMap: this.config.sourceMap,
         outputHashing: this.config.outputHashing,
+        postcss: await this.postcss,
       }),
     ]);
 
@@ -96,7 +102,14 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
     }
     if (this.config.index) {
       const bundleFiles = this.entryFiles(results[0]!);
-      await IndexHtmlWriter.from(this.config.entryPoints, this.config.outputPath, this.config.index, injectedStyles, bundleFiles).write();
+      await IndexHtmlWriter.from(
+        this.config.entryPoints,
+        this.config.outputPath,
+        this.config.index,
+        injectedStyles,
+        bundleFiles,
+        this.config.deployUrl,
+      ).write();
     }
     if (declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
   }

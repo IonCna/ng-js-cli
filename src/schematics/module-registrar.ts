@@ -1,5 +1,5 @@
-import { existsSync } from "node:fs";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { statSync } from "node:fs";
+import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { parse } from "@swc/core";
 import type { ArrayExpression, ModuleItem, Node, ObjectExpression, Span } from "@swc/core";
@@ -10,16 +10,16 @@ interface Edit {
   text: string;
 }
 
-type NgModuleProperty = "declarations" | "imports";
+type NgModuleProperty = "declarations" | "imports" | "exports";
 
 /**
  * Registra lo recién generado en un `@NgModule` como lo hace el `ng generate` de Angular:
  * los declarables (component/directive/pipe) van a `declarations`, un módulo a `imports`,
- * más el `import { X } from "..."` correspondiente. Solo edita por texto (sin reescribir
+ * más el `import { X } from "..."` correspondiente (y a `exports` con `--export`). Solo edita por texto (sin reescribir
  * el archivo), así el formato del usuario queda intacto.
  */
 export class ModuleRegistrar {
-  private static readonly PROPERTY: Partial<Record<SchematicKind, NgModuleProperty>> = {
+  private static readonly PROPERTY: Partial<Record<SchematicKind, "declarations" | "imports">> = {
     component: "declarations",
     directive: "declarations",
     pipe: "declarations",
@@ -27,17 +27,17 @@ export class ModuleRegistrar {
   };
 
   /** A qué array del `@NgModule` va cada schematic; `undefined` = no se registra en ningún módulo (service, class, guard, ...). */
-  static propertyFor(kind: SchematicKind): NgModuleProperty | undefined {
+  static propertyFor(kind: SchematicKind): "declarations" | "imports" | undefined {
     return ModuleRegistrar.PROPERTY[kind];
   }
 
   /**
-   * Sube desde `startDir` hasta `sourceRoot` (inclusive) y devuelve el `*.module.ts` de la primera carpeta
+   * `findModule` de Angular: sube desde `startDir` hasta `stopDir` (inclusive; la raíz del proyecto) y devuelve el `*.module.ts` de la primera carpeta
    * que tenga uno (los `-routing.module.ts` no cuentan); `undefined` si no hay ninguno en todo el camino.
    * Si una carpeta tiene más de uno es ambiguo — error, como en Angular.
    */
-  static async find(startDir: string, sourceRoot: string): Promise<string | undefined> {
-    const stop = resolve(sourceRoot);
+  static async find(startDir: string, stopDir: string): Promise<string | undefined> {
+    const stop = resolve(stopDir);
     let dir = resolve(startDir);
 
     while (true) {
@@ -58,22 +58,34 @@ export class ModuleRegistrar {
   }
 
   /**
-   * Resuelve `--module <path>` como Angular: relativo a la carpeta destino y, si no, a `sourceRoot`; probando
-   * `<path>`, `<path>.ts`, `<path>.module.ts` y `<path>/<basename>.module.ts`.
+   * `findModuleFromOptions` de Angular para `--module <path>`: se prueba en cada carpeta desde `<basePath>/<module>`
+   * y desde `<basePath>/<name>` hacia arriba (hasta `stopDir`), de la más profunda a la menos: `<carpeta>` (si es un
+   * archivo), `<carpeta>/<m>.ts` y `<carpeta>/<m>.module.ts`, con `m` el último segmento de `--module`.
    */
-  static locate(module: string, targetDir: string, sourceRoot: string): string {
-    for (const base of [targetDir, sourceRoot]) {
-      const path = resolve(base, module);
-      const candidates = [path, `${path}.ts`, `${path}.module.ts`, join(path, `${basename(path)}.module.ts`)];
-      const found = candidates.find((candidate) => candidate.endsWith(".ts") && existsSync(candidate));
-      if (found) return found;
+  static locate(module: string, basePath: string, name: string, stopDir: string): string {
+    const stop = resolve(stopDir);
+    const modulePath = resolve(basePath, module);
+    const moduleBaseName = basename(modulePath);
+    const candidates = new Set([resolve(basePath)]);
+    for (const start of [modulePath, resolve(basePath, name)]) {
+      for (let dir = start; ; dir = dirname(dir)) {
+        candidates.add(dir);
+        if (dir === stop || dirname(dir) === dir) break;
+      }
     }
-    throw new Error(`No se encontró el módulo "${module}" (ni desde "${targetDir}" ni desde "${sourceRoot}").`);
+    const dirs = [...candidates].sort((a, b) => b.length - a.length);
+    for (const dir of dirs) {
+      for (const candidate of [dir, join(dir, `${moduleBaseName}.ts`), join(dir, `${moduleBaseName}.module.ts`)]) {
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate;
+      }
+    }
+    throw new Error(`No existe el módulo "${module}". Se buscó en:\n    ${dirs.join("\n    ")}`);
   }
 
-  static async register(modulePath: string, generated: GeneratedSchematic, dir: string): Promise<void> {
+  /** El módulo con `generated` registrado — no lo escribe (lo hace `generate`, salvo `--dry-run`). */
+  static async register(modulePath: string, generated: GeneratedSchematic, dir: string, { exported = false } = {}): Promise<string> {
     const property = ModuleRegistrar.propertyFor(generated.kind);
-    if (!property) return;
+    if (!property) throw new Error(`"${generated.kind}" no se registra en un @NgModule.`);
 
     const code = await readFile(modulePath, "utf8");
     const ast = await parse(code, { syntax: "typescript", decorators: true, target: "es2022" });
@@ -86,11 +98,11 @@ export class ModuleRegistrar {
     const edits = [
       ModuleRegistrar.importEdit(code, ast.body, modulePath, generated, dir),
       ModuleRegistrar.arrayEdit(code, metadata, property, generated.className, modulePath),
+      ...(exported ? [ModuleRegistrar.arrayEdit(code, metadata, "exports", generated.className, modulePath)] : []),
     ];
 
     // De atrás para adelante — insertar adelante corre los offsets de los que faltan.
-    const result = edits.sort((a, b) => b.at - a.at).reduce((text, { at, text: add }) => text.slice(0, at) + add + text.slice(at), code);
-    await writeFile(modulePath, result, "utf8");
+    return edits.sort((a, b) => b.at - a.at).reduce((text, { at, text: add }) => text.slice(0, at) + add + text.slice(at), code);
   }
 
   private static async listDir(dir: string): Promise<string[]> {

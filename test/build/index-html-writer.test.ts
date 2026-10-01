@@ -41,6 +41,21 @@ describe("IndexHtmlWriter.transform()", () => {
     expect(writer("app/index.html").transform(html)).toBe(`<script type="module" src="../index.js"></script>`);
   });
 
+  it("con deployUrl, scripts y estilos salen con ese prefijo (no relativos al index.html)", () => {
+    const html = `<html><head></head><body><script type="module" src="/src/index.ts"></script></body></html>`;
+    const deployed = IndexHtmlWriter.from(
+      { index: "src/index.ts" },
+      "dist",
+      { input: "index.html", output: "app/index.html" },
+      ["styles-AB12.css"],
+      { index: "index-ABCD1234.js" },
+      "/Client/dist/",
+    );
+    expect(deployed.transform(html)).toBe(
+      `<html><head><link rel="stylesheet" href="/Client/dist/styles-AB12.css">\n</head><body><script type="module" src="/Client/dist/index-ABCD1234.js"></script></body></html>`,
+    );
+  });
+
   it("los estilos inyectados van como <link> antes de </head>, en orden", () => {
     const html = `<html><head><title>x</title></head><body></body></html>`;
     const withStyles = IndexHtmlWriter.from({ index: "src/index.ts" }, "dist", { input: "index.html", output: "app/index.html" }, [

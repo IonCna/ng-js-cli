@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 /** `CanActivateFn` — funcional, como Angular 15+ (`ngjs-core/router`, ver `route.ts`). */
 export class GuardTemplate {
@@ -23,7 +22,8 @@ export const ${this.guardName}: CanActivateFn = (route: ActivatedRouteSnapshot) 
 `;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.guard.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    const fileName = `${this.fileBase}.guard`;
+    return { kind: "guard", className: this.guardName, fileName, files: [{ name: `${fileName}.ts`, content: this.toString() }] };
   }
 }

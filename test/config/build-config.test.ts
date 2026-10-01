@@ -84,6 +84,22 @@ describe("BuildConfig.create()", () => {
     expect(config.outputPath).toBe("dist-prod");
   });
 
+  it("deployUrl: vacío si no hay; con `/` final siempre (se concatena delante de cada archivo)", async () => {
+    expect((await BuildConfig.create({})).deployUrl).toBe("");
+
+    const withDeployUrl = (deployUrl: string): NgjsConfig => ({
+      version: "1",
+      root: ".",
+      projectType: "application",
+      sourceRoot: "src",
+      architect: { build: { options: { entryPoints: { main: "src/main.ts" }, outputPath: "dist", deployUrl } } },
+    });
+    await writeFile(join(dir, "ngjs.json"), JSON.stringify(withDeployUrl("/Client/dist")));
+    expect((await BuildConfig.create({})).deployUrl).toBe("/Client/dist/");
+    await writeFile(join(dir, "ngjs.json"), JSON.stringify(withDeployUrl("https://cdn.example/app/")));
+    expect((await BuildConfig.create({})).deployUrl).toBe("https://cdn.example/app/");
+  });
+
   describe("index (solo application)", () => {
     const writeConfig = async (projectType: NgjsConfig["projectType"], index?: { input: string; output?: string }) => {
       const config: NgjsConfig = {

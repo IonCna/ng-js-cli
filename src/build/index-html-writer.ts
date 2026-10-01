@@ -26,6 +26,8 @@ export class IndexHtmlWriter {
     private readonly styles: string[],
     /** Nombre de entry → `.js` que emitió esbuild (relativo a `outputPath`); sin entrada, `<nombre>.js`. */
     private readonly bundleFiles: Record<string, string>,
+    /** `deployUrl` normalizado (con `/` final); `""` → relativo al `index.html` emitido. */
+    private readonly deployUrl: string,
   ) {}
 
   static from(
@@ -34,8 +36,9 @@ export class IndexHtmlWriter {
     options: IndexHtmlOptions,
     styles: string[] = [],
     bundleFiles: Record<string, string> = {},
+    deployUrl = "",
   ): IndexHtmlWriter {
-    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles, bundleFiles);
+    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles, bundleFiles, deployUrl);
   }
 
   async write(): Promise<void> {
@@ -80,8 +83,9 @@ export class IndexHtmlWriter {
     );
   }
 
-  /** De la carpeta del `index.html` emitido a `outputPath` (`app/index.html` → `../`). */
+  /** `deployUrl` si hay; si no, de la carpeta del `index.html` emitido a `outputPath` (`app/index.html` → `../`). */
   private prefix(): string {
+    if (this.deployUrl) return this.deployUrl;
     const depth = this.options.output.split(/[\\/]/).length - 1;
     return depth ? "../".repeat(depth) : "";
   }

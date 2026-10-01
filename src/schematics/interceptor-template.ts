@@ -1,6 +1,5 @@
-import { writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { CaseTransform } from "@/schematics/case-transform.ts";
+import type { GeneratedSchematic } from "@/schematics/schematic-registry.ts";
 
 /**
  * Clase (`implements HttpInterceptor`) — a diferencia de guard/resolver,
@@ -32,7 +31,8 @@ export class ${this.className} implements HttpInterceptor {
 `;
   }
 
-  async write(dir: string): Promise<void> {
-    await writeFile(join(dir, `${this.fileBase}.interceptor.ts`), this.toString(), "utf8");
+  generated(): GeneratedSchematic {
+    const fileName = `${this.fileBase}.interceptor`;
+    return { kind: "interceptor", className: this.className, fileName, files: [{ name: `${fileName}.ts`, content: this.toString() }] };
   }
 }

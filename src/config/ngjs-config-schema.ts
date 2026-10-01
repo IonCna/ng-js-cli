@@ -42,6 +42,7 @@ const buildOptionsSchema = z.object({
   declarations: z.boolean().optional(),
   htmlLoader: z.boolean().optional(),
   index: z.object({ input: z.string(), output: z.string().optional() }).optional(),
+  deployUrl: z.string().optional(),
   assets: z.array(z.union([z.string(), assetGlobSchema])).optional(),
   styles: z.array(z.union([z.string(), styleEntrySchema])).optional(),
   scripts: z.array(styleEntrySchema).optional(),
@@ -81,6 +82,7 @@ export const ngjsConfigSchema = z.object({
   projectType: z.enum(["application", "library"]),
   sourceRoot: z.string(),
   prefix: z.string().optional(),
+  schematics: z.record(z.string(), z.record(z.string(), z.unknown())).optional(),
   architect: z.object({
     build: buildTargetSchema,
     serve: serveTargetSchema.optional(),

@@ -10,10 +10,6 @@ import { PipeTemplate } from "@/schematics/pipe-template.ts";
 import { ResolverTemplate } from "@/schematics/resolver-template.ts";
 import { ServiceTemplate } from "@/schematics/service-template.ts";
 
-export interface SchematicContext {
-  prefix: string;
-}
-
 export type SchematicKind =
   | "component"
   | "directive"
@@ -27,71 +23,137 @@ export type SchematicKind =
   | "resolver"
   | "interceptor";
 
+/**
+ * `css` o `none`: `scss`/`sass`/`less` (que sí acepta Angular) no se ofrecen — ni `ngjs build` ni `ng-js-vite` los
+ * compilan, el archivo generado no andaría.
+ */
+export type ComponentStyle = "css" | "none";
+
+/** Las opciones de los schematics de Angular 16 que `ngjs generate` soporta, con los mismos nombres. */
+export interface SchematicOptions {
+  flat: boolean;
+  skipTests: boolean;
+  skipImport: boolean;
+  /** `--module <path>`: el `@NgModule` donde registrar, en vez del más cercano. */
+  module?: string;
+  /** Además de `declarations`, a `exports` del módulo. */
+  export: boolean;
+  prefix?: string;
+  selector?: string;
+  style: ComponentStyle;
+  inlineStyle: boolean;
+  inlineTemplate: boolean;
+  /** `:host { display: block; }` en el CSS del componente. */
+  displayBlock: boolean;
+  /** Sufijo del archivo (`card.component.ts`) y, en un componente, de la clase (`CardComponent`). */
+  type: string;
+}
+
+type OptionName = keyof SchematicOptions;
+
+/** Un archivo generado, relativo a la carpeta destino. */
+export interface SchematicFile {
+  name: string;
+  content: string;
+}
+
 /** `className` = nombre del símbolo principal generado (clase, interfaz, enum, o la función/const de guard/resolver). */
 export interface GeneratedSchematic {
   kind: SchematicKind;
   className: string;
+  /** Sin `.ts`: base del spec (`<fileName>.spec.ts`) y del `import` en el módulo. */
   fileName: string;
+  files: SchematicFile[];
 }
 
-type Schematic = (name: string, dir: string, context: SchematicContext) => Promise<GeneratedSchematic>;
+interface SchematicDefinition {
+  /** Las opciones que acepta, como su `schema.json` en Angular 16. */
+  options: readonly OptionName[];
+  /** Defaults propios — pisan los de `DEFAULTS`. */
+  defaults?: Partial<SchematicOptions>;
+  /** `projectPrefix`: el `prefix` de `ngjs.json`, para el selector cuando no viene `--prefix`. */
+  generate(name: string, options: SchematicOptions, projectPrefix: string | undefined): GeneratedSchematic;
+}
+
+const DEFAULTS: SchematicOptions = {
+  flat: true,
+  skipTests: false,
+  skipImport: false,
+  export: false,
+  style: "css",
+  inlineStyle: false,
+  inlineTemplate: false,
+  displayBlock: false,
+  type: "",
+};
+
+const OPTION_TYPES: Record<OptionName, "boolean" | "string"> = {
+  flat: "boolean",
+  skipTests: "boolean",
+  skipImport: "boolean",
+  module: "string",
+  export: "boolean",
+  prefix: "string",
+  selector: "string",
+  style: "string",
+  inlineStyle: "boolean",
+  inlineTemplate: "boolean",
+  displayBlock: "boolean",
+  type: "string",
+};
 
 /** Diccionario cerrado — sin soporte para schematics de terceros, esto es todo lo que hay. */
-const SCHEMATICS: Record<SchematicKind, Schematic> = {
-  component: async (name, dir, ctx) => {
-    const template = ComponentTemplate.from(name, ctx.prefix);
-    await template.write(dir);
-    return { kind: "component", className: template.className, fileName: `${template.fileBase}.component` };
+const SCHEMATICS: Record<SchematicKind, SchematicDefinition> = {
+  component: {
+    options: [
+      "flat", "skipTests", "skipImport", "module", "export", "prefix", "selector",
+      "style", "inlineStyle", "inlineTemplate", "displayBlock", "type",
+    ],
+    defaults: { flat: false, type: "Component" },
+    generate: (name, options, projectPrefix) =>
+      ComponentTemplate.from(name, { ...options, prefix: options.prefix ?? projectPrefix }).generated(),
   },
-  directive: async (name, dir, ctx) => {
-    const template = DirectiveTemplate.from(name, ctx.prefix);
-    await template.write(dir);
-    return { kind: "directive", className: template.className, fileName: `${template.fileBase}.directive` };
+  directive: {
+    options: ["flat", "skipTests", "skipImport", "module", "export", "prefix", "selector"],
+    generate: (name, options, projectPrefix) =>
+      DirectiveTemplate.from(name, { prefix: options.prefix ?? projectPrefix, selector: options.selector }).generated(),
   },
-  pipe: async (name, dir) => {
-    const template = PipeTemplate.from(name);
-    await template.write(dir);
-    return { kind: "pipe", className: template.className, fileName: `${template.fileBase}.pipe` };
+  pipe: {
+    options: ["flat", "skipTests", "skipImport", "module", "export"],
+    generate: (name) => PipeTemplate.from(name).generated(),
   },
-  service: async (name, dir) => {
-    const template = ServiceTemplate.from(name);
-    await template.write(dir);
-    return { kind: "service", className: template.className, fileName: `${template.fileBase}.service` };
+  service: {
+    options: ["flat", "skipTests"],
+    generate: (name) => ServiceTemplate.from(name).generated(),
   },
-  module: async (name, dir) => {
-    const template = ModuleTemplate.from(name);
-    await template.write(dir);
-    return { kind: "module", className: template.className, fileName: `${template.fileBase}.module` };
+  module: {
+    options: ["flat", "module"],
+    defaults: { flat: false },
+    generate: (name) => ModuleTemplate.from(name).generated(),
   },
-  class: async (name, dir) => {
-    const template = ClassTemplate.from(name);
-    await template.write(dir);
-    return { kind: "class", className: template.className, fileName: template.fileBase };
+  class: {
+    options: ["skipTests", "type"],
+    generate: (name, options) => ClassTemplate.from(name, options.type).generated(),
   },
-  interface: async (name, dir) => {
-    const template = InterfaceTemplate.from(name);
-    await template.write(dir);
-    return { kind: "interface", className: template.interfaceName, fileName: template.fileBase };
+  interface: {
+    options: ["prefix", "type"],
+    generate: (name, options) => InterfaceTemplate.from(name, options.prefix ?? "", options.type).generated(),
   },
-  enum: async (name, dir) => {
-    const template = EnumTemplate.from(name);
-    await template.write(dir);
-    return { kind: "enum", className: template.enumName, fileName: template.fileBase };
+  enum: {
+    options: ["type"],
+    generate: (name, options) => EnumTemplate.from(name, options.type).generated(),
   },
-  guard: async (name, dir) => {
-    const template = GuardTemplate.from(name);
-    await template.write(dir);
-    return { kind: "guard", className: template.guardName, fileName: `${template.fileBase}.guard` };
+  guard: {
+    options: ["flat", "skipTests"],
+    generate: (name) => GuardTemplate.from(name).generated(),
   },
-  resolver: async (name, dir) => {
-    const template = ResolverTemplate.from(name);
-    await template.write(dir);
-    return { kind: "resolver", className: template.resolverName, fileName: `${template.fileBase}.resolver` };
+  resolver: {
+    options: ["flat", "skipTests"],
+    generate: (name) => ResolverTemplate.from(name).generated(),
   },
-  interceptor: async (name, dir) => {
-    const template = InterceptorTemplate.from(name);
-    await template.write(dir);
-    return { kind: "interceptor", className: template.className, fileName: `${template.fileBase}.interceptor` };
+  interceptor: {
+    options: ["flat", "skipTests"],
+    generate: (name) => InterceptorTemplate.from(name).generated(),
   },
 };
 
@@ -109,8 +171,46 @@ const ALIASES: Record<string, SchematicKind> = {
   itc: "interceptor",
 };
 
+export interface ResolvedSchematic {
+  kind: SchematicKind;
+  /**
+   * Como Angular: default del schematic < `schematics["@schematics/angular:<kind>"]` de `ngjs.json` < flags. Una
+   * opción que el schematic no acepta (o de tipo equivocado) es error — en las flags y en `ngjs.json`.
+   */
+  options(configured: Record<string, unknown> | undefined, flags: Record<string, unknown>): SchematicOptions;
+  generate(name: string, options: SchematicOptions, projectPrefix: string | undefined): GeneratedSchematic;
+}
+
 /** Acepta el nombre completo (`component`) o su alias (`c`); `undefined` si no existe. */
-export function resolveSchematic(key: string): { kind: SchematicKind; generate: Schematic } | undefined {
+export function resolveSchematic(key: string): ResolvedSchematic | undefined {
   const kind = ALIASES[key] ?? (key in SCHEMATICS ? (key as SchematicKind) : undefined);
-  return kind ? { kind, generate: SCHEMATICS[kind] } : undefined;
+  if (!kind) return undefined;
+  const definition = SCHEMATICS[kind];
+  return {
+    kind,
+    options: (configured, flags) => {
+      const options: SchematicOptions = { ...DEFAULTS, ...definition.defaults };
+      const layers: [Record<string, unknown>, (name: string) => string][] = [
+        [configured ?? {}, (name) => `"${name}" en schematics["@schematics/angular:${kind}"] de ngjs.json`],
+        [flags, (name) => `--${name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`],
+      ];
+      for (const [layer, describe] of layers) {
+        for (const [name, value] of Object.entries(layer)) {
+          if (value === undefined) continue;
+          if (!definition.options.includes(name as OptionName)) {
+            throw new Error(`${describe(name)}: el schematic "${kind}" no tiene esa opción.`);
+          }
+          if (typeof value !== OPTION_TYPES[name as OptionName]) {
+            throw new Error(`${describe(name)}: esperaba ${OPTION_TYPES[name as OptionName] === "boolean" ? "true/false" : "un texto"}.`);
+          }
+          Object.assign(options, { [name]: value });
+        }
+      }
+      if (options.style !== "css" && options.style !== "none") {
+        throw new Error(`--style "${options.style}": ngjs solo compila CSS (usá "css" o "none").`);
+      }
+      return options;
+    },
+    generate: definition.generate,
+  };
 }
