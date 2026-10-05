@@ -43,10 +43,10 @@ describe("GenerateConfig.create()", () => {
     expect(config.prefix).toBe("ngb");
   });
 
-  it("prefix por default 'app' si ngjs.json no lo tiene", async () => {
+  it("sin prefix en ngjs.json no hay prefijo (como Angular): el selector sale solo con el nombre", async () => {
     await writeNgjsConfig(undefined);
     const config = await GenerateConfig.create({ schematic: "component", name: "card" });
 
-    expect(config.prefix).toBe("app");
+    expect(config.prefix).toBeUndefined();
   });
 });

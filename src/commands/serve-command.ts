@@ -64,9 +64,10 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
   }
 
   /**
-   * Sirve `/templates/…` y `/styles/…` (`TemplateFiles.middleware`). Esos `.html`/`.css` no están en el grafo de
-   * módulos de Vite, así que editarlos no recargaba nada: se da por cambiado el componente dueño (el mismo evento del
-   * watcher que al editar el `.ts`): el compilador lo recompila — `ɵngContent` puede cambiar — y Vite recarga.
+   * Sirve `/templates/…` y `/media/…` (`TemplateFiles.middleware`). El `.html` y el `.css` de un componente no están
+   * en el grafo de módulos de Vite, así que editarlos no recargaba nada: se da por cambiado el componente dueño (el
+   * mismo evento del watcher que al editar el `.ts`): el compilador lo recompila — `ɵngContent` puede cambiar, y el
+   * CSS va dentro del módulo — y Vite recarga.
    */
   private static templatesPlugin(templates: TemplateFiles, templateCompiler: TemplateCompiler): Plugin {
     return {
