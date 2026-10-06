@@ -184,9 +184,17 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       charset: "utf8",
       plugins: [
         SingletonPackages.plugin(["angular"], this.config.external),
-        pluginLoader(this.config.sourceRoot, [this.templateCompiler, this.templates ?? templateTransform], fileReplacements, this.config.projectType, (scanner) => {
-          if (this.config.projectType === "library") this.manifest = LibraryManifest.from(scanner);
-        }),
+        pluginLoader(
+          this.config.sourceRoot,
+          [this.templateCompiler, this.templates ?? templateTransform],
+          fileReplacements,
+          this.config.projectType,
+          (scanner) => {
+            if (this.config.projectType === "library") this.manifest = LibraryManifest.from(scanner);
+          },
+          // Modo prod de AngularJS (debug info apagado): solo acá — `serve` y `test` van por Vite y lo dejan prendido.
+          true,
+        ),
       ],
     });
   }
