@@ -57,6 +57,27 @@ describe("GlobalStyles", () => {
       expect(css).toContain("url(/logo.png)");
     });
 
+    it("una entrada .scss se compila con Sass: variables, parciales y paquetes de node_modules", async () => {
+      await mkdir(join(dir, "node_modules", "kit", "scss"), { recursive: true });
+      await writeFile(join(dir, "node_modules", "kit", "scss", "_buttons.scss"), ".btn { color: $accent; }");
+      await writeFile(join(dir, "src", "_tokens.scss"), "$accent: #123456;");
+      await writeFile(
+        join(dir, "src", "theme.scss"),
+        `@import "tokens"; @import "kit/scss/buttons"; .card { .heading { color: $accent; } background: url(./img/bg.svg); }`,
+      );
+
+      await GlobalStyles.from(["src/style.css", "src/theme.scss"], dir).build("dist", { minify: false, sourceMap: false });
+      const css = await readFile(join(dir, "dist", "styles.css"), "utf8");
+
+      expect(css).toContain(".btn {");
+      expect(css).toContain(".card .heading {");
+      expect(css).toContain("#123456");
+      expect(css).not.toContain("$accent");
+      // Mismo bundle y en orden: primero el .css, después el .scss; sus url() también van a media/.
+      expect(css.indexOf("body {")).toBeLessThan(css.indexOf(".btn {"));
+      expect(css.split('url("./media/bg.svg")')).toHaveLength(3);
+    });
+
     it("outputHashing: 'all' → styles-<hash>.css y media con hash; build() devuelve el nombre a enlazar", async () => {
       const injected = await GlobalStyles.from(["src/style.css"], dir).build("dist", {
         minify: false,
