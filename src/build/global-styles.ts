@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { PostcssConfiguration } from "@/build/postcss-configuration.ts";
+import { SassStyles } from "@/build/sass-styles.ts";
 import type { OutputHashing, StyleEntry } from "@/config/cli-config.ts";
 import * as esbuild from "esbuild";
 
@@ -19,6 +20,7 @@ interface StyleBundle {
  * `bundleName`; `inject: false` lo emite igual pero sin `<link>` en el `index.html` (se carga a mano).
  *
  * Con `postcss.config.json`/`.postcssrc.json` en la raíz (ver `PostcssConfiguration`) pasan por esos plugins — Tailwind.
+ * Una entrada `.scss`/`.sass` se compila con Sass (ver `SassStyles`).
  *
  * - `build`: esbuild bundlea cada grupo en `<outputPath>/<bundleName>.css` — resuelve `@import` (también de
  *   paquetes: `@import "bootstrap/dist/css/bootstrap.css"`) y copia lo que referencian los `url()` a `media/`.
@@ -92,7 +94,11 @@ export class GlobalStyles {
           sourcemap: options.sourceMap,
           loader: GlobalStyles.ASSET_LOADERS,
           assetNames: hashMedia ? "media/[name]-[hash]" : "media/[name]",
-          plugins: [GlobalStyles.SITE_URLS, ...(options.postcss ? [options.postcss.esbuildPlugin()] : [])],
+          plugins: [
+            GlobalStyles.SITE_URLS,
+            SassStyles.esbuildPlugin(this.root, options.postcss),
+            ...(options.postcss ? [options.postcss.esbuildPlugin()] : []),
+          ],
           charset: "utf8",
           logLevel: "silent",
           // Se escribe a mano: con hash, el `.css` cambia de nombre (y su `.map` con él).

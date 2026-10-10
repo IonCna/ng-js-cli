@@ -1,6 +1,5 @@
-import { watch } from "node:fs";
+import { existsSync, readFileSync, watch } from "node:fs";
 import { readdir, rm, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { join, relative, resolve, sep } from "node:path";
 import { DeclarationEmitter } from "@/build/declaration-emitter.ts";
 import { GlobalStyles } from "@/build/global-styles.ts";
@@ -183,7 +182,7 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
       // sin esto esbuild escapa `ɵ` (`ɵ`) — válido pero ilegible; `ɵcmp` queda literal.
       charset: "utf8",
       plugins: [
-        SingletonPackages.plugin(["angular"], this.config.external),
+        SingletonPackages.plugin(SingletonPackages.names(), this.config.external),
         pluginLoader(
           this.config.sourceRoot,
           [this.templateCompiler, this.templates ?? templateTransform],
@@ -204,18 +203,47 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
  * Como `resolve.dedupe` de Vite: una librería enlazada (`link:ngjs-core`) resuelve SU copia de `node_modules/angular`,
  * y esbuild metería dos AngularJS en el bundle ("Tried to load AngularJS more than once", dos `angular.module`
  * distintos). Cada paquete listado se resuelve siempre desde el proyecto (`process.cwd()`), una sola copia.
+ *
+ * Además de `angular`, las `peerDependencies` de las dependencias directas del proyecto (`rxjs` de `ngjs-core` y
+ * `ngb-js`): un peer lo provee quien consume, así que la copia que una librería enlazada tiene para compilarse no
+ * entra al bundle.
  */
-class SingletonPackages {
-  static plugin(packages: string[], external: string[]): esbuild.Plugin {
+export class SingletonPackages {
+  /** `angular` + los peers de las dependencias directas que el proyecto tiene instalados. */
+  static names(root = process.cwd()): string[] {
+    const manifest = SingletonPackages.readManifest(join(root, "package.json"));
+    const names = new Set(["angular"]);
+    for (const dependency of Object.keys({ ...manifest?.dependencies, ...manifest?.devDependencies })) {
+      const peers = SingletonPackages.readManifest(join(root, "node_modules", dependency, "package.json"))?.peerDependencies;
+      for (const peer of Object.keys(peers ?? {})) {
+        if (existsSync(join(root, "node_modules", peer, "package.json"))) names.add(peer);
+      }
+    }
+    return [...names];
+  }
+
+  private static readManifest(path: string): Record<string, Record<string, string> | undefined> | undefined {
+    try {
+      return JSON.parse(readFileSync(path, "utf8"));
+    } catch {
+      return undefined;
+    }
+  }
+
+  static plugin(packages: string[], external: string[], root = process.cwd()): esbuild.Plugin {
     const bundled = packages.filter((name) => !external.includes(name));
-    const filter = new RegExp(`^(${bundled.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})$`);
-    const projectRequire = createRequire(join(process.cwd(), "package.json"));
+    // También los subpaths (`rxjs/operators`).
+    const filter = new RegExp(`^(${bundled.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(/.*)?$`);
 
     return {
       name: "ngjs-singleton-packages",
       setup(build) {
         if (!bundled.length) return;
-        build.onResolve({ filter }, (args) => ({ path: projectRequire.resolve(args.path) }));
+        // El resolver de esbuild (no `require.resolve`): respeta `exports`/`module`, así un paquete ESM sigue tree-shakeable.
+        build.onResolve({ filter }, (args) => {
+          if (args.pluginData?.singletonPackage) return undefined;
+          return build.resolve(args.path, { kind: args.kind, resolveDir: root, pluginData: { singletonPackage: true } });
+        });
       },
     };
   }

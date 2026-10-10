@@ -1,6 +1,8 @@
 import { Assets } from "@/build/assets.ts";
 import { GlobalStyles } from "@/build/global-styles.ts";
 import { PostcssConfiguration } from "@/build/postcss-configuration.ts";
+import { SassStyles } from "@/build/sass-styles.ts";
+import { SingletonPackages } from "@/commands/build-command.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { AngularDependencies } from "@/serve/angular-dependencies.ts";
 import { ProxyConfiguration } from "@/serve/proxy-configuration.ts";
@@ -41,8 +43,14 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       // `tsconfigPaths`: los alias de `compilerOptions.paths` (`@/*`), como `ngjs build` (esbuild) y `ngjs test`.
       // Como `build` (y Angular): PostCSS solo con `postcss.config.json`/`.postcssrc.json` — inline, así Vite no
       // busca por su cuenta un `postcss.config.js` que el build ignoraría.
-      css: { postcss: { plugins: postcss?.plugins ?? [] } },
-      resolve: { dedupe: ["angular"], tsconfigPaths: true },
+      // Sass (`.scss`/`.sass` en `styles`): lo compila Vite con el `sass` del proyecto y las opciones del build.
+      css: {
+        postcss: { plugins: postcss?.plugins ?? [] },
+        preprocessorOptions: { scss: SassStyles.options(), sass: SassStyles.options() },
+      },
+      // Los mismos paquetes que `build` resuelve desde el proyecto (ver `SingletonPackages`): `angular` y los peers de
+      // las dependencias (`rxjs`) — sin esto cada librería enlazada trae su copia y Vite pre-bundlea las dos.
+      resolve: { dedupe: SingletonPackages.names(), tsconfigPaths: true },
       // `angular` y lo que lo requiere, todo desde el arranque — ver `AngularDependencies` (bug de Vite 8 al
       // re-optimizar a mitad de sesión: "does not provide an export named 'n'").
       optimizeDeps: { include: AngularDependencies.include() },

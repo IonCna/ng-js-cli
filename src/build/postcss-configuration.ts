@@ -82,16 +82,18 @@ export class PostcssConfiguration {
       name: "ngjs-postcss",
       setup: (build) => {
         build.onLoad({ filter: /\.css$/ }, async (args) => {
-          const { default: postcss } = await import("postcss");
-          const result = await postcss(this.plugins).process(await readFile(args.path, "utf8"), {
-            from: args.path,
-            to: args.path,
-            map: false,
-          });
-          const watchFiles = result.messages.filter((message) => message.type === "dependency").map((message) => message.file as string);
-          return { contents: result.css, loader: "css", watchFiles: [this.path, ...watchFiles] };
+          const result = await this.process(await readFile(args.path, "utf8"), args.path);
+          return { contents: result.css, loader: "css", watchFiles: result.watchFiles };
         });
       },
     };
+  }
+
+  /** Pasa `css` (el contenido de `from`) por los plugins; también lo usa `SassStyles` con el CSS que compila. */
+  async process(css: string, from: string): Promise<{ css: string; watchFiles: string[] }> {
+    const { default: postcss } = await import("postcss");
+    const result = await postcss(this.plugins).process(css, { from, to: from, map: false });
+    const watchFiles = result.messages.filter((message) => message.type === "dependency").map((message) => message.file as string);
+    return { css: result.css, watchFiles: [this.path, ...watchFiles] };
   }
 }
