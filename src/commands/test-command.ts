@@ -27,7 +27,7 @@ export class TestCommand extends NgjsCommand<TestConfig> {
   async run(): Promise<void> {
     const setupFile = resolve(TestCommand.SETUP_FILE);
     await mkdir(join(setupFile, ".."), { recursive: true });
-    await writeFile(setupFile, TestEnvironment.source(), "utf8");
+    await writeFile(setupFile, TestEnvironment.source(this.config.prodMode), "utf8");
 
     await startVitest(
       [],

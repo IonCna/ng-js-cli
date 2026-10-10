@@ -6,6 +6,8 @@ export interface TestFlags {
   /** `--no-watch` → `false` (`commander` da `true` por default). */
   watch?: boolean;
   include?: string[];
+  /** `--prod`: los specs corren como la app de `ngjs build` — con el debug info de AngularJS apagado. */
+  prod?: boolean;
 }
 
 export class TestConfig extends NgjsCommandConfig {
@@ -18,6 +20,7 @@ export class TestConfig extends NgjsCommandConfig {
     public readonly sourceRoot: string,
     public readonly projectType: "application" | "library",
     public readonly fileReplacements: FileReplacement[],
+    public readonly prodMode: boolean,
   ) {
     super();
   }
@@ -35,6 +38,7 @@ export class TestConfig extends NgjsCommandConfig {
       config.sourceRoot,
       config.projectType,
       options.fileReplacements ?? [],
+      flags.prod === true,
     );
   }
 }
