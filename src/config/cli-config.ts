@@ -66,9 +66,15 @@ export interface BuildOptions {
   /**
    * Como `deployUrl` de Angular: URL (absoluta o de origen, `/Client/dist/`) donde quedan publicados los archivos del
    * build, aparte del `<base href>` que usa el router. Prefija los `<script>`/`<link>` del `index.html` y los
-   * `templateUrl` de los componentes; sin él, todo queda relativo al `<base href>`.
+   * `templateUrl` de los componentes (con `isolateTemplate`); sin él, todo queda relativo al `<base href>`.
    */
   deployUrl?: string;
+  /**
+   * Por defecto, como Angular: el `.html` de un `templateUrl` va dentro del JS (`template`), sin pedido aparte.
+   * `true`: cada template en su archivo (`templates/nombre-<hash>.html`), que AngularJS pide al usar el componente.
+   * También en `serve`.
+   */
+  isolateTemplate?: boolean;
   /**
    * Archivos estáticos, como Angular 16: `"src/assets"`/`"src/favicon.ico"` (dentro de `sourceRoot`, se publican con
    * su ruta desde ahí) o `{ glob, input, output, ignore? }`. `build` los copia a `outputPath`; `serve` los sirve.

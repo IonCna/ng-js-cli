@@ -100,6 +100,26 @@ describe("BuildConfig.create()", () => {
     expect((await BuildConfig.create({})).deployUrl).toBe("https://cdn.example/app/");
   });
 
+  it("isolateTemplate: false por default (templates dentro del JS, como Angular); una configuration lo puede pisar", async () => {
+    expect((await BuildConfig.create({})).isolateTemplate).toBe(false);
+
+    const config: NgjsConfig = {
+      version: "1",
+      root: ".",
+      projectType: "application",
+      sourceRoot: "src",
+      architect: {
+        build: {
+          options: { entryPoints: { main: "src/main.ts" }, outputPath: "dist", isolateTemplate: true },
+          configurations: { production: { isolateTemplate: false } },
+        },
+      },
+    };
+    await writeFile(join(dir, "ngjs.json"), JSON.stringify(config));
+    expect((await BuildConfig.create({})).isolateTemplate).toBe(true);
+    expect((await BuildConfig.create({ configuration: "production" })).isolateTemplate).toBe(false);
+  });
+
   it("deleteOutputPath: true por default (como Angular); ngjs.json lo puede apagar", async () => {
     expect((await BuildConfig.create({})).deleteOutputPath).toBe(true);
 

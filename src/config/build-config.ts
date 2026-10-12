@@ -41,6 +41,8 @@ export class BuildConfig extends NgjsCommandConfig {
     public readonly outputHashing: OutputHashing,
     /** `deployUrl` de `ngjs.json`, con `/` final (`""` si no hay) — ver `BuildOptions.deployUrl`. */
     public readonly deployUrl: string,
+    /** `isolateTemplate` de `ngjs.json` (default `false`: templates dentro del JS, como Angular). */
+    public readonly isolateTemplate: boolean,
   ) {
     super();
   }
@@ -72,6 +74,7 @@ export class BuildConfig extends NgjsCommandConfig {
       override.assets ?? options.assets ?? [],
       override.outputHashing ?? options.outputHashing ?? "none",
       BuildConfig.normalizeDeployUrl(override.deployUrl ?? options.deployUrl),
+      override.isolateTemplate ?? options.isolateTemplate ?? false,
     );
   }
 

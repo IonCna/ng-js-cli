@@ -18,9 +18,10 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
   }
 
   async run(): Promise<void> {
-    // Nombre fijo (sin hash): el `templateUrl` lo fija el escaneo al arrancar; el middleware relee el `.html` en
-    // cada request, así editar un template se ve al recargar.
-    const templates = TemplateFiles.create({ hashed: false });
+    // Como `build`: templates dentro del JS salvo `isolateTemplate`. Con él, nombre fijo (sin hash): el `templateUrl`
+    // lo fija el escaneo al arrancar; el middleware relee el `.html` en cada request, así editar un template se ve
+    // al recargar.
+    const templates = TemplateFiles.create({ hashed: false, inline: !this.config.isolateTemplate });
     const templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
     const postcss = await PostcssConfiguration.load();
     const proxy = await ProxyConfiguration.load(process.cwd(), this.config.proxyConfig);

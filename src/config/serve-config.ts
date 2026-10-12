@@ -27,6 +27,8 @@ export class ServeConfig extends NgjsCommandConfig {
     public readonly assets: (string | AssetGlob)[],
     /** Ruta del JSON de proxies (`proxyConfig`), si hay — ver `ProxyConfiguration`. */
     public readonly proxyConfig: string | undefined,
+    /** Como en `build`: `isolateTemplate` de `architect.build.options` (default `false`: templates dentro del JS). */
+    public readonly isolateTemplate: boolean,
   ) {
     super();
   }
@@ -43,6 +45,7 @@ export class ServeConfig extends NgjsCommandConfig {
       await ServeConfig.readBaseHref(join(process.cwd(), "index.html")),
       config.architect.build.options.assets ?? [],
       flags.proxyConfig ?? options.proxyConfig,
+      config.architect.build.options.isolateTemplate ?? false,
     );
   }
 

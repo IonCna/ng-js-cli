@@ -21,11 +21,14 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
   }
 
   /**
-   * Aplicación: templates en archivos aparte (`templates/nombre-<hash>.html`, como `ng-js-vite` en Vite). Librería:
-   * inline — un `/templates/...` apuntaría a archivos que la app que la consume no tiene.
+   * Aplicación: templates dentro del JS, como Angular; con `isolateTemplate`, en archivos aparte
+   * (`templates/nombre-<hash>.html`). Librería: siempre inline — un `/templates/...` apuntaría a archivos que la app
+   * que la consume no tiene.
    */
   private readonly templates =
-    this.config.projectType === "application" ? TemplateFiles.create({ base: this.config.deployUrl }) : undefined;
+    this.config.projectType === "application"
+      ? TemplateFiles.create({ base: this.config.deployUrl, inline: !this.config.isolateTemplate })
+      : undefined;
 
   /** `disabled="x"` → `ng-disabled="x"` en los templates (ver `ng-js-template-compiler`), antes del scope de `ng-js-vite`. */
   private readonly templateCompiler = TemplateCompiler.create(this.config.sourceRoot);
