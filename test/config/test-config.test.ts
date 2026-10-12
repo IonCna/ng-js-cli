@@ -62,4 +62,11 @@ describe("TestConfig.create()", () => {
     expect(fromFlags.watch).toBe(false);
     expect(fromFlags.include).toEqual(["app/b.spec.ts"]);
   });
+
+  it("--prod prende prodMode; sin el flag queda apagado", async () => {
+    await writeNgjsConfig();
+
+    expect((await TestConfig.create({ watch: false })).prodMode).toBe(false);
+    expect((await TestConfig.create({ watch: false, prod: true })).prodMode).toBe(true);
+  });
 });

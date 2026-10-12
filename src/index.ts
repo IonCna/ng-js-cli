@@ -60,6 +60,7 @@ program
   .alias(testCommandDefinition.alias)
   .option("--no-watch", "corre los specs una vez y termina (para CI)")
   .option("--include <globs...>", "globs de specs a correr, en vez de architect.test.options.include")
+  .option("--prod", "corre los specs como ngjs build: con el debug info de AngularJS apagado")
   .action(runTestCommand);
 
 program
