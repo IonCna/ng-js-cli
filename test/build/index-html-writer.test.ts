@@ -66,4 +66,33 @@ describe("IndexHtmlWriter.transform()", () => {
       `<html><head><title>x</title><link rel="stylesheet" href="../styles.css">\n<link rel="stylesheet" href="../theme.css">\n</head><body><script type="module" src="../index.js"></script>\n</body></html>`,
     );
   });
+
+  describe("plataforma aparte y modulepreload", () => {
+    const withExtras = (entryPoints: Record<string, string> = { main: "src/main.ts" }) =>
+      IndexHtmlWriter.from(
+        entryPoints,
+        "dist",
+        { input: "index.html", output: "index.html" },
+        [],
+        { main: "main-AB12.js", other: "other-CD34.js" },
+        "/Client/dist/",
+        { platform: "platform-EF56.js", modulePreloads: ["chunk-1.js", "chunk-2.js"] },
+      );
+
+    // Los `defer` y los módulos corren en orden de documento: la plataforma corre antes que cualquier módulo.
+    it("la plataforma va una sola vez, como <script defer>, justo antes del primer entry", () => {
+      const html = `<head><script type="module" src="/src/main.ts"></script><script type="module" src="/src/other.ts"></script></head>`;
+      expect(withExtras({ main: "src/main.ts", other: "src/other.ts" }).transform(html)).toBe(
+        `<head><script defer src="/Client/dist/platform-EF56.js"></script>\n<script type="module" src="/Client/dist/main-AB12.js"></script><script type="module" src="/Client/dist/other-CD34.js"></script>` +
+          `<link rel="modulepreload" href="/Client/dist/chunk-1.js">\n<link rel="modulepreload" href="/Client/dist/chunk-2.js">\n</head>`,
+      );
+    });
+
+    it("sin script del entry, la plataforma va antes de los bundles que se agregan al final", () => {
+      expect(withExtras().transform("<html><body></body></html>")).toBe(
+        `<html><link rel="modulepreload" href="/Client/dist/chunk-1.js">\n<link rel="modulepreload" href="/Client/dist/chunk-2.js">\n` +
+          `<body><script defer src="/Client/dist/platform-EF56.js"></script>\n<script type="module" src="/Client/dist/main-AB12.js"></script>\n</body></html>`,
+      );
+    });
+  });
 });

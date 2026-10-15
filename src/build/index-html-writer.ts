@@ -7,12 +7,22 @@ export interface IndexHtmlOptions {
   output: string;
 }
 
+/** Lo que el build carga además de los entries (rutas relativas a `outputPath`). */
+export interface IndexHtmlExtras {
+  /** La plataforma (`ɵngjsPlatform`) cuando no va en el `banner`: un `<script defer>` justo antes del primer entry. */
+  platform?: string;
+  /** Chunks que los entries importan estáticamente: `<link rel="modulepreload">` antes de `</head>`, como Angular. */
+  modulePreloads?: string[];
+}
+
 /**
  * El `index.html` de una aplicación en el build: el mismo que sirve Vite en `serve` (un `<script type="module"
  * src="/src/index.ts">` apuntando al entry fuente), con cada script de un entry point reescrito al bundle que
  * emitió esbuild (`index.js`). Si el HTML no referencia ningún entry, se agregan antes de `</body>`, como Angular.
- * La plataforma (`ɵngjsPlatform`) ya va en el `banner` del bundle. Los estilos globales inyectados (`styles`) van
- * como `<link rel="stylesheet">` antes de `</head>`, en orden, como Angular.
+ * La plataforma (`ɵngjsPlatform`) va en el `banner` del bundle o, si el build la emite aparte (`extras.platform`),
+ * en un `<script defer>` antes del entry: los `defer` y los módulos corren en orden de documento, así que corre antes
+ * que cualquier módulo de la app, como el `<script>` que pone Vite en `serve`. Los estilos globales inyectados
+ * (`styles`) y los `modulepreload` van antes de `</head>`, en orden, como Angular.
  */
 export class IndexHtmlWriter {
   private static readonly SCRIPT = /<script\b([^>]*?)\bsrc=(["'])([^"']+)\2([^>]*)>\s*<\/script>/gi;
@@ -28,6 +38,7 @@ export class IndexHtmlWriter {
     private readonly bundleFiles: Record<string, string>,
     /** `deployUrl` normalizado (con `/` final); `""` → relativo al `index.html` emitido. */
     private readonly deployUrl: string,
+    private readonly extras: IndexHtmlExtras,
   ) {}
 
   static from(
@@ -37,8 +48,9 @@ export class IndexHtmlWriter {
     styles: string[] = [],
     bundleFiles: Record<string, string> = {},
     deployUrl = "",
+    extras: IndexHtmlExtras = {},
   ): IndexHtmlWriter {
-    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles, bundleFiles, deployUrl);
+    return new IndexHtmlWriter(process.cwd(), entryPoints, outputPath, options, styles, bundleFiles, deployUrl, extras);
   }
 
   async write(): Promise<void> {
@@ -49,12 +61,15 @@ export class IndexHtmlWriter {
   }
 
   transform(html: string): string {
-    return this.injectStyles(this.rewriteScripts(html));
+    return this.injectHead(this.rewriteScripts(html));
   }
 
-  private injectStyles(html: string): string {
-    if (!this.styles.length) return html;
-    const links = this.styles.map((href) => `<link rel="stylesheet" href="${this.prefix()}${href}">`).join("\n");
+  private injectHead(html: string): string {
+    const links = [
+      ...this.styles.map((href) => `<link rel="stylesheet" href="${this.prefix()}${href}">`),
+      ...(this.extras.modulePreloads ?? []).map((href) => `<link rel="modulepreload" href="${this.prefix()}${href}">`),
+    ].join("\n");
+    if (!links) return html;
     if (/<\/head>/i.test(html)) return html.replace(/<\/head>/i, `${links}\n</head>`);
     return /<body\b/i.test(html) ? html.replace(/<body\b/i, `${links}\n<body`) : `${links}\n${html}`;
   }
@@ -66,13 +81,21 @@ export class IndexHtmlWriter {
     const rewritten = html.replace(IndexHtmlWriter.SCRIPT, (tag, before: string, quote: string, src: string, after: string) => {
       const bundle = bundles.get(this.resolveSource(src));
       if (!bundle) return tag;
+      // La plataforma, una sola vez: antes del primer entry.
+      const platform = matched ? "" : this.platformTag();
       matched = true;
-      return `<script${before}src=${quote}${bundle}${quote}${after}></script>`;
+      return `${platform}<script${before}src=${quote}${bundle}${quote}${after}></script>`;
     });
     if (matched) return rewritten;
 
     const tags = [...bundles.values()].map((bundle) => `<script type="module" src="${bundle}"></script>`).join("\n");
-    return /<\/body>/i.test(rewritten) ? rewritten.replace(/<\/body>/i, `${tags}\n</body>`) : `${rewritten}\n${tags}\n`;
+    const scripts = `${this.platformTag()}${tags}`;
+    return /<\/body>/i.test(rewritten) ? rewritten.replace(/<\/body>/i, `${scripts}\n</body>`) : `${rewritten}\n${scripts}\n`;
+  }
+
+  /** `<script defer>` de la plataforma, con su salto de línea; `""` si va en el `banner`. */
+  private platformTag(): string {
+    return this.extras.platform ? `<script defer src="${this.prefix()}${this.extras.platform}"></script>\n` : "";
   }
 
   /** Ruta absoluta del entry fuente → URL del bundle, relativa al `index.html` emitido. */

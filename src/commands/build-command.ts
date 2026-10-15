@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, watch } from "node:fs";
 import { readdir, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve, sep } from "node:path";
@@ -9,6 +10,7 @@ import { Assets } from "@/build/assets.ts";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { BuildConfig, type BuildFlags } from "@/config/build-config.ts";
 import * as esbuild from "esbuild";
+import { PlatformCode } from "ng-js-compiler";
 import { LibraryManifest, type NgjsManifest, pluginLoader } from "ng-js-compiler/esbuild";
 import { TemplateCompiler } from "ng-js-template-compiler";
 import { TemplateFiles, templateTransform } from "ng-js-vite/esbuild";
@@ -136,9 +138,54 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
         injectedStyles,
         bundleFiles,
         this.config.deployUrl,
+        {
+          platform: this.platformOutside() ? await this.writePlatform() : undefined,
+          modulePreloads: this.staticImports(results[0]!, Object.values(bundleFiles)),
+        },
       ).write();
     }
     if (declarations) await DeclarationEmitter.from(this.config.sourceRoot, this.config.outputPath).emit();
+  }
+
+  /**
+   * La plataforma (`ɵngjsPlatform` + `ZonePatchesRuntime`) va en su propio archivo, cargado una vez antes del entry
+   * (`IndexHtmlWriter`), y no en el `banner` de esbuild: con `splitting` el banner se copia, sin minificar, en cada
+   * chunk — en OPI eran 18 KB por archivo, ~1 MB del build. Solo con `index.html`: sin él nadie la cargaría.
+   */
+  private platformOutside(): boolean {
+    return this.config.projectType === "application" && Boolean(this.config.index);
+  }
+
+  /** Escribe `platform[-<hash>].js` (minificado como el bundle) en `outputPath`; devuelve su nombre. */
+  private async writePlatform(): Promise<string> {
+    // `prodMode` como el bundle: `ngjs build` apaga el debug info de AngularJS (ver `pluginLoader`).
+    const { code } = await esbuild.transform(PlatformCode.source(true), { loader: "js", minify: this.config.minify, charset: "utf8" });
+    const hashed = this.config.outputHashing === "all" || this.config.outputHashing === "bundles";
+    const name = hashed ? `platform-${createHash("sha256").update(code).digest("hex").slice(0, 8).toUpperCase()}.js` : "platform.js";
+    await writeFile(join(this.config.outputPath, name), code);
+    return name;
+  }
+
+  /**
+   * Los chunks que los entries importan estáticamente (y los que importan ellos), relativos a `outputPath`: el
+   * navegador los descubre recién al ejecutar el entry; con `<link rel="modulepreload">` bajan en paralelo con él,
+   * como hace Angular con los chunks iniciales. Los `import()` (rutas lazy) no entran.
+   */
+  private staticImports(result: esbuild.BuildResult<{ metafile: true }>, entries: string[]): string[] {
+    const outputs = result.metafile.outputs;
+    const key = (file: string) => relative(process.cwd(), join(this.config.outputPath, file)).split(sep).join("/");
+    const seen = new Set(entries.map(key));
+    const pending = [...seen];
+    const found: string[] = [];
+    for (let output = pending.shift(); output; output = pending.shift()) {
+      for (const imported of outputs[output]?.imports ?? []) {
+        if (imported.kind !== "import-statement" || imported.external || seen.has(imported.path)) continue;
+        seen.add(imported.path);
+        pending.push(imported.path);
+        found.push(relative(this.config.outputPath, imported.path).split(sep).join("/"));
+      }
+    }
+    return found;
   }
 
   /** Nombre de entry → el `.js` que emitió esbuild (relativo a `outputPath`): con `outputHashing` lleva hash. */
@@ -196,6 +243,7 @@ export class BuildCommand extends NgjsCommand<BuildConfig> {
           },
           // Modo prod de AngularJS (debug info apagado): solo acá — `serve` y `test` van por Vite y lo dejan prendido.
           true,
+          !this.platformOutside(),
         ),
       ],
     });
