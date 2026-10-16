@@ -1,4 +1,5 @@
-import type { NgjsConfig } from "@/config/cli-config.ts";
+import type { NgjsFile } from "@/config/cli-config.ts";
+import { ConfigReader } from "@/config/config-reader.ts";
 import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 
 /** `ngjs config <path> [value]` — `path` en dot-notation sobre `ngjs.json`; `value` ausente = modo lectura. */
@@ -9,8 +10,8 @@ export interface ConfigFlags {
 
 export class ConfigConfig extends NgjsCommandConfig {
   private constructor(
-    /** El `ngjs.json` completo, tal cual está en disco — el comando navega/muta esto según `segments`. */
-    public readonly config: NgjsConfig,
+    /** El `ngjs.json` completo, tal cual está en disco (un proyecto o un workspace): el comando navega/muta esto según `segments`. */
+    public readonly config: NgjsFile,
     public readonly segments: string[],
     /** `undefined` = `get`; cualquier otro valor (incluido `""`) = `set`. */
     public readonly rawValue: string | undefined,
@@ -19,7 +20,7 @@ export class ConfigConfig extends NgjsCommandConfig {
   }
 
   static async create(flags: ConfigFlags): Promise<ConfigConfig> {
-    const config = await this.read();
+    const config = await ConfigReader.readFile();
     const segments = flags.path.split(".").filter(Boolean);
     if (segments.length === 0) {
       throw new Error(`Path de config inválido: "${flags.path}".`);

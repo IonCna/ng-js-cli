@@ -520,6 +520,8 @@ No bloquean `migrate`, son pulido de CLI:
   hoy siempre escribe plano, como `--flat`) y `--flat` para volver a lo de hoy.
 - Generación de `.spec.ts` por schematic (Angular real lo hace por default).
 - `ng lint` / `ng add` / `ng update` — sin equivalente (`ng test` ya es `ngjs test`).
-- Multi-proyecto (`angular.json` soporta varios `projects`; `ngjs.json` es de
-  un solo proyecto) — la brecha estructural más grande si algún día hay
-  monorepo con más de una app/lib.
+- ~~Multi-proyecto~~ — hecho: `ngjs.json` acepta `projects` (como
+  `angular.json`, rutas desde la raíz del workspace); `ngjs build|serve|test
+  [project]` y `ngjs generate --project`; sin nombre, el proyecto cuya `root`
+  contiene el directorio actual, o el único. El formato de un solo proyecto
+  sigue igual. Falta `ngjs generate application|library` para crear uno.

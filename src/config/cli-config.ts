@@ -1,5 +1,28 @@
+/**
+ * `ngjs.json` con varios proyectos, como `angular.json`: cada entrada de `projects` es un `NgjsProjectConfig` y sus
+ * rutas (`root`, `sourceRoot`, las de `architect`) son relativas a la raíz del workspace, donde está `ngjs.json`.
+ * Un `ngjs.json` sin `projects` (`NgjsConfig`) sigue siendo un workspace de un solo proyecto.
+ */
+export interface NgjsWorkspace {
+  version: string;
+  /** Como Angular: la carpeta donde viven los proyectos que no son el de la raíz (`projects`). Solo informativo. */
+  newProjectRoot?: string;
+  projects: Record<string, NgjsProjectConfig>;
+}
+
+/** Un proyecto de `NgjsWorkspace.projects`: lo mismo que un `ngjs.json` de un solo proyecto, sin `version`. */
+export type NgjsProjectConfig = Omit<NgjsConfig, "version">;
+
+/** Lo que puede haber en `ngjs.json`: un proyecto solo o un workspace con varios. */
+export type NgjsFile = NgjsConfig | NgjsWorkspace;
+
+/** El proyecto que corre un comando, ya resuelto (ver `ConfigReader.read`). */
 export interface NgjsConfig {
   version: string;
+  /**
+   * Raíz del proyecto, relativa a la del workspace (`""` o `"."` = la misma). Como Angular: ahí se busca el
+   * `index.html` por default y hasta ahí sube `ngjs generate` buscando el `@NgModule` donde registrar.
+   */
   root: string;
   /**
    * `"library"` (esm+cjs sin bundlear una app, `declarations: true`) vs.

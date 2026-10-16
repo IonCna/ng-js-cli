@@ -10,7 +10,8 @@ import { ConfigReader } from "@/config/config-reader.ts";
  * comando), solo el `read()`.
  */
 export abstract class NgjsCommandConfig {
-  protected static async read(): Promise<NgjsConfig> {
-    return ConfigReader.read();
+  /** `project`: el de `ngjs build [project]` (o `--project`); sin él, el que elige `ConfigReader.read`. */
+  protected static async read(project?: string): Promise<NgjsConfig> {
+    return ConfigReader.read(project);
   }
 }

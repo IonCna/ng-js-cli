@@ -79,8 +79,7 @@ const testTargetSchema = z.object({
     .optional(),
 });
 
-export const ngjsConfigSchema = z.object({
-  version: z.string(),
+const projectSchema = z.object({
   root: z.string(),
   projectType: z.enum(["application", "library"]),
   sourceRoot: z.string(),
@@ -92,3 +91,18 @@ export const ngjsConfigSchema = z.object({
     test: testTargetSchema.optional(),
   }),
 });
+
+/** `ngjs.json` de un solo proyecto. */
+export const ngjsConfigSchema = projectSchema.extend({ version: z.string() });
+
+/** `ngjs.json` con varios proyectos (`NgjsWorkspace`), como `angular.json`. */
+export const ngjsWorkspaceSchema = z.object({
+  version: z.string(),
+  newProjectRoot: z.string().optional(),
+  projects: z.record(z.string(), projectSchema),
+});
+
+/** El schema que corresponde a lo que hay en `ngjs.json`: con `projects`, un workspace; sin él, un proyecto solo. */
+export function ngjsFileSchema(file: unknown): typeof ngjsConfigSchema | typeof ngjsWorkspaceSchema {
+  return typeof file === "object" && file !== null && "projects" in file ? ngjsWorkspaceSchema : ngjsConfigSchema;
+}

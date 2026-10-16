@@ -17,6 +17,7 @@ program
 program
   .command(buildCommandDefinition.name)
   .alias(buildCommandDefinition.alias)
+  .argument("[project]", "proyecto de ngjs.json a buildear (default: el de este directorio, o el único)")
   .option("-c, --configuration <names>", "configuration(s) de architect.build a aplicar, separadas por coma (la última pisa)")
   .option("-w, --watch", "reconstruye al cambiar algo de sourceRoot (sin regenerar los .d.ts)")
   .action(runBuildCommand);
@@ -44,6 +45,7 @@ program
   .option("-t, --inline-template [bool]", "template inline (template) en vez de un .html", parseBoolean)
   .option("-b, --display-block [bool]", ":host { display: block; } en los estilos del componente", parseBoolean)
   .option("--type <type>", "sufijo del archivo (y de la clase en component): card.page.ts")
+  .option("--project <name>", "proyecto de ngjs.json donde generar (default: el de este directorio, o el único)")
   .option("-d, --dry-run [bool]", "mostrar qué se crearía/actualizaría sin escribir nada", parseBoolean)
   .option("-f, --force [bool]", "sobrescribir archivos que ya existen", parseBoolean)
   .action(runGenerateCommand);
@@ -51,6 +53,7 @@ program
 program
   .command(serveCommandDefinition.name)
   .alias(serveCommandDefinition.alias)
+  .argument("[project]", "proyecto de ngjs.json a servir (default: el de este directorio, o el único)")
   .option("-p, --port <port>", "puerto del dev-server", Number)
   .option("--proxy-config <path>", "JSON de proxies hacia el backend (como ng serve)")
   .action(runServeCommand);
@@ -58,6 +61,7 @@ program
 program
   .command(testCommandDefinition.name)
   .alias(testCommandDefinition.alias)
+  .argument("[project]", "proyecto de ngjs.json cuyos specs correr (default: el de este directorio, o el único)")
   .option("--no-watch", "corre los specs una vez y termina (para CI)")
   .option("--include <globs...>", "globs de specs a correr, en vez de architect.test.options.include")
   .option("--prod", "corre los specs como ngjs build: con el debug info de AngularJS apagado")

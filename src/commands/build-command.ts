@@ -301,8 +301,8 @@ export class SingletonPackages {
 }
 
 /** Lo que `commander` invoca en `.action(...)` — todo lo que necesita para registrar el comando vive acá al lado. */
-export async function runBuildCommand(flags: BuildFlags): Promise<void> {
-  const config = await BuildConfig.create(flags);
+export async function runBuildCommand(project: string | undefined, flags: Omit<BuildFlags, "project">): Promise<void> {
+  const config = await BuildConfig.create({ ...flags, project });
   const cmd = BuildCommand.from(config);
   await cmd.clean();
   if (flags.watch) await cmd.watch();

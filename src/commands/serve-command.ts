@@ -54,7 +54,9 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
       resolve: { dedupe: SingletonPackages.names(), tsconfigPaths: true },
       // `angular` y lo que lo requiere, todo desde el arranque — ver `AngularDependencies` (bug de Vite 8 al
       // re-optimizar a mitad de sesión: "does not provide an export named 'n'").
-      optimizeDeps: { include: AngularDependencies.include() },
+      // `entries`: Vite busca dependencias desde todos los `.html` de su raíz; en un workspace eso incluye el
+      // `index.html` de otro proyecto, cuyo código este escaneo no conoce. Solo el `index` del proyecto que se sirve.
+      optimizeDeps: { include: AngularDependencies.include(), entries: [this.config.index] },
       // Los templates de `ng-js-vite` van como transform PREVIO del compilador (igual que en `build`), no como plugin
       // de Vite aparte: `ModuleWriter` registra `.component()` en el archivo del `@NgModule` con la metadata del
       // ESCANEO — si el escaneo viera el `templateUrl` crudo, lo emitiría relativo al componente dentro de
@@ -65,6 +67,7 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
         ServeCommand.templatesPlugin(templates, templateCompiler),
         ServeCommand.stylesPlugin(GlobalStyles.from(this.config.styles), this.config.baseHref),
         ServeCommand.assetsPlugin(Assets.from(this.config.assets, this.config.sourceRoot), this.config.baseHref),
+        ServeCommand.indexPlugin(this.config.index, this.config.baseHref),
       ],
     });
 
@@ -90,6 +93,30 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
         };
         server.watcher.on("change", onChange);
         server.watcher.on("unlink", onChange);
+      },
+    };
+  }
+
+  /**
+   * Vite sirve el `index.html` de su raíz (la del workspace). Un proyecto con otro `index` (`projects/login/src/index.html`)
+   * lo recibe en cada navegación, como `ng serve`: un pedido de HTML a una ruta sin extensión (`/`, `/olvide`) pasa a
+   * pedir ese archivo, que Vite transforma igual que el de la raíz.
+   */
+  static indexPlugin(index: string, baseHref: string): Plugin {
+    return {
+      name: "ngjs-index",
+      configureServer: (server) => {
+        if (index === "index.html") return;
+        server.middlewares.use((request, _response, next) => {
+          const pathname = request.url?.split(/[?#]/)[0] ?? "";
+          const navigation =
+            (request.method === "GET" || request.method === "HEAD") &&
+            Boolean(request.headers.accept?.includes("text/html")) &&
+            `${pathname}/`.startsWith(baseHref) &&
+            !/\.[^/]+$/.test(pathname);
+          if (navigation) request.url = `${baseHref}${index}`;
+          next();
+        });
       },
     };
   }
@@ -130,8 +157,8 @@ export class ServeCommand extends NgjsCommand<ServeConfig> {
 }
 
 /** Lo que `commander` invoca en `.action(...)` — todo lo que necesita para registrar el comando vive acá al lado. */
-export async function runServeCommand(flags: ServeFlags): Promise<void> {
-  const config = await ServeConfig.create(flags);
+export async function runServeCommand(project: string | undefined, flags: Omit<ServeFlags, "project">): Promise<void> {
+  const config = await ServeConfig.create({ ...flags, project });
   const cmd = ServeCommand.from(config);
   await cmd.run();
 }

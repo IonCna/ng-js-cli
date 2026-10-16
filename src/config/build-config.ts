@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, join, sep } from "node:path";
 import type { IndexHtmlOptions } from "@/build/index-html-writer.ts";
 import type { AssetGlob, BuildOptions, FileReplacement, NgjsConfig, OutputHashing, StyleEntry } from "@/config/cli-config.ts";
 import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
@@ -10,6 +10,8 @@ export interface BuildFlags {
   configuration?: string;
   /** `--watch` — después del primer build, reconstruye al cambiar algo de `sourceRoot` (ver `BuildCommand.watch`). */
   watch?: boolean;
+  /** `ngjs build [project]` — el proyecto del workspace a buildear (ver `ConfigReader.read`). */
+  project?: string;
 }
 
 export class BuildConfig extends NgjsCommandConfig {
@@ -48,7 +50,7 @@ export class BuildConfig extends NgjsCommandConfig {
   }
 
   static async create(flags: BuildFlags): Promise<BuildConfig> {
-    const config = await this.read();
+    const config = await this.read(flags.project);
     const { options, configurations } = config.architect.build;
     const override = BuildConfig.mergeConfigurations(configurations, flags.configuration);
 
@@ -85,13 +87,14 @@ export class BuildConfig extends NgjsCommandConfig {
   }
 
   /**
-   * `index` de `ngjs.json`; sin él, el `index.html` de la raíz del proyecto — el mismo que sirve Vite en `serve`.
+   * `index` de `ngjs.json`; sin él, el `index.html` de la `root` del proyecto — el mismo que sirve Vite en `serve`.
    * `output` por default: el nombre de `input` (`src/index.html` → `index.html`). Una librería no emite HTML.
    */
   private static resolveIndex(config: NgjsConfig, index: BuildOptions["index"]): IndexHtmlOptions | undefined {
     if (config.projectType !== "application") return undefined;
     if (index) return { input: index.input, output: index.output ?? basename(index.input) };
-    return existsSync(join(process.cwd(), "index.html")) ? { input: "index.html", output: "index.html" } : undefined;
+    const input = join(config.root || ".", "index.html").split(sep).join("/");
+    return existsSync(join(process.cwd(), input)) ? { input, output: "index.html" } : undefined;
   }
 
   /** Como Angular real: `a,b` aplica `a` y después `b` encima (la última pisa); un nombre que no existe es error. */

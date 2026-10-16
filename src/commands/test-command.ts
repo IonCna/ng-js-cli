@@ -82,8 +82,8 @@ class FileReplacements {
 }
 
 /** Lo que `commander` invoca en `.action(...)` — todo lo que necesita para registrar el comando vive acá al lado. */
-export async function runTestCommand(flags: TestFlags): Promise<void> {
-  const config = await TestConfig.create(flags);
+export async function runTestCommand(project: string | undefined, flags: Omit<TestFlags, "project">): Promise<void> {
+  const config = await TestConfig.create({ ...flags, project });
   const cmd = TestCommand.from(config);
   await cmd.run();
 }

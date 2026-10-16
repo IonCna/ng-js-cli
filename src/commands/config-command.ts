@@ -2,7 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { ConfigConfig, type ConfigFlags } from "@/config/config-command-config.ts";
-import { ngjsConfigSchema } from "@/config/ngjs-config-schema.ts";
+import { ngjsFileSchema } from "@/config/ngjs-config-schema.ts";
 
 type JsonObject = Record<string, unknown>;
 
@@ -25,13 +25,13 @@ export class ConfigCommand extends NgjsCommand<ConfigConfig> {
   }
 
   private async set(rawValue: string): Promise<void> {
-    // Clon profundo: el `NgjsConfig` en `this.config.config` no se toca hasta confirmar
+    // Clon profundo: el `ngjs.json` en `this.config.config` no se toca hasta confirmar
     // que el resultado final pasa el schema — un `set` inválido no deja el objeto a medio mutar.
     const draft = structuredClone(this.config.config) as unknown as JsonObject;
     const value = this.parseValue(rawValue);
     this.write(draft, this.config.segments, value);
 
-    const result = ngjsConfigSchema.safeParse(draft);
+    const result = ngjsFileSchema(draft).safeParse(draft);
     if (!result.success) {
       const issues = result.error.issues.map((issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`).join("; ");
       throw new Error(`El valor deja "ngjs.json" inválido — ${issues}`);

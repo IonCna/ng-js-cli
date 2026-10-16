@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { NgjsCommand } from "@/commands/ngjs-command.ts";
 import { GenerateConfig, type GenerateFlags } from "@/config/generate-config.ts";
 import { CaseTransform } from "@/schematics/case-transform.ts";
@@ -64,10 +64,10 @@ export class GenerateCommand extends NgjsCommand<GenerateConfig> {
    */
   private async findModule(dir: string, kind: SchematicKind, options: SchematicOptions): Promise<string | undefined> {
     if (options.skipImport || !ModuleRegistrar.propertyFor(kind)) return undefined;
-    if (options.module) return ModuleRegistrar.locate(options.module, this.config.path, this.config.name, process.cwd());
+    if (options.module) return ModuleRegistrar.locate(options.module, this.config.path, this.config.name, resolve(this.config.root));
     if (kind === "module") return undefined;
 
-    const modulePath = await ModuleRegistrar.find(dir, process.cwd());
+    const modulePath = await ModuleRegistrar.find(dir, resolve(this.config.root));
     if (!modulePath) {
       throw new Error(
         `No se encontró ningún módulo (*.module.ts) desde "${dir}" hacia arriba donde registrar "${this.config.name}". Usá --skip-import para no registrarlo.`,

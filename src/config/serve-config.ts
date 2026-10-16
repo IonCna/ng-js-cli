@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import type { AssetGlob, StyleEntry } from "@/config/cli-config.ts";
 import { NgjsCommandConfig } from "@/config/ngjs-command-config.ts";
 
@@ -8,6 +8,8 @@ export interface ServeFlags {
   port?: number;
   /** `--proxy-config <path>` — pisa `architect.serve.options.proxyConfig`. */
   proxyConfig?: string;
+  /** `ngjs serve [project]` — el proyecto del workspace a servir (ver `ConfigReader.read`). */
+  project?: string;
 }
 
 export class ServeConfig extends NgjsCommandConfig {
@@ -29,23 +31,30 @@ export class ServeConfig extends NgjsCommandConfig {
     public readonly proxyConfig: string | undefined,
     /** Como en `build`: `isolateTemplate` de `architect.build.options` (default `false`: templates dentro del JS). */
     public readonly isolateTemplate: boolean,
+    /**
+     * El `index.html` que se sirve, relativo a la raíz del workspace (la de Vite): `index.input` de
+     * `architect.build.options` o, sin él, el de la `root` del proyecto — el mismo que usa `build`.
+     */
+    public readonly index: string,
   ) {
     super();
   }
 
   static async create(flags: ServeFlags): Promise<ServeConfig> {
-    const config = await this.read();
+    const config = await this.read(flags.project);
     const options = config.architect.serve?.options ?? {};
+    const index = config.architect.build.options.index?.input ?? join(config.root || ".", "index.html").split(sep).join("/");
 
     return new ServeConfig(
       flags.port ?? options.port ?? 4200,
       options.allowedHosts ?? [],
       config.sourceRoot,
       config.architect.build.options.styles ?? [],
-      await ServeConfig.readBaseHref(join(process.cwd(), "index.html")),
+      await ServeConfig.readBaseHref(join(process.cwd(), index)),
       config.architect.build.options.assets ?? [],
       flags.proxyConfig ?? options.proxyConfig,
       config.architect.build.options.isolateTemplate ?? false,
+      index.replace(/^\.\//, ""),
     );
   }
 

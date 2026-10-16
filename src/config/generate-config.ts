@@ -13,6 +13,8 @@ export interface GenerateFlags extends Partial<SchematicOptions> {
   dryRun?: boolean;
   /** `--force`: sobrescribe archivos que ya existen. */
   force?: boolean;
+  /** `--project`: el proyecto del workspace donde generar (ver `ConfigReader.read`). */
+  project?: string;
 }
 
 export class GenerateConfig extends NgjsCommandConfig {
@@ -29,12 +31,14 @@ export class GenerateConfig extends NgjsCommandConfig {
     private readonly schematics: NgjsConfig["schematics"],
     public readonly dryRun: boolean,
     public readonly force: boolean,
+    /** `root` del proyecto: hasta ahí sube la búsqueda del `@NgModule` donde registrar. */
+    public readonly root: string,
   ) {
     super();
   }
 
-  static async create({ schematic, name, path, dryRun, force, ...options }: GenerateFlags): Promise<GenerateConfig> {
-    const config = await this.read();
+  static async create({ schematic, name, path, dryRun, force, project, ...options }: GenerateFlags): Promise<GenerateConfig> {
+    const config = await this.read(project);
     return new GenerateConfig(
       schematic,
       name,
@@ -45,6 +49,7 @@ export class GenerateConfig extends NgjsCommandConfig {
       config.schematics,
       dryRun ?? false,
       force ?? false,
+      config.root || ".",
     );
   }
 

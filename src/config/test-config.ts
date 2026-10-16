@@ -8,6 +8,8 @@ export interface TestFlags {
   include?: string[];
   /** `--prod`: los specs corren como la app de `ngjs build` — con el debug info de AngularJS apagado. */
   prod?: boolean;
+  /** `ngjs test [project]` — el proyecto del workspace cuyos specs correr (ver `ConfigReader.read`). */
+  project?: string;
 }
 
 export class TestConfig extends NgjsCommandConfig {
@@ -26,7 +28,7 @@ export class TestConfig extends NgjsCommandConfig {
   }
 
   static async create(flags: TestFlags): Promise<TestConfig> {
-    const config = await this.read();
+    const config = await this.read(flags.project);
     const options = config.architect.test?.options ?? {};
 
     return new TestConfig(
