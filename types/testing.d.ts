@@ -35,8 +35,9 @@ declare global {
       argsFor(index: number): Parameters<F>;
       allArgs(): Parameters<F>[];
       all(): CallInfo<F>[];
-      first(): CallInfo<F> | undefined;
-      mostRecent(): CallInfo<F> | undefined;
+      /** Como `@types/jasmine`: sin llamadas, en ejecución es `undefined`. */
+      first(): CallInfo<F>;
+      mostRecent(): CallInfo<F>;
       reset(): void;
     }
 
@@ -99,6 +100,8 @@ declare global {
 
 declare module "vitest" {
   interface Assertion<T = any> extends jasmine.Matchers<T> {
+    /** Como Jasmine: el texto encabeza el mensaje si la expectativa falla. */
+    withContext(message: string): Assertion<T>;
     toBeTrue(): T;
     toBeFalse(): T;
     toHaveBeenCalledOnceWith(...args: unknown[]): T;

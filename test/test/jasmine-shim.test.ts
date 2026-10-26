@@ -40,3 +40,14 @@ describe("JasmineShim — done de Jasmine", () => {
     expect(registered[2]!()).toBeInstanceOf(Promise);
   });
 });
+
+describe("JasmineShim — withContext", () => {
+  it("expect(x).withContext(texto) encadena y, si falla, el texto encabeza el mensaje (como Jasmine)", () => {
+    const sandbox: Record<string, unknown> = { vi, expect, it: Object.assign(() => {}, { only: () => {}, skip: () => {} }), describe: () => {} };
+    new Function("globalThis", JasmineShim.source())(sandbox);
+    const chained = expect(1) as unknown as { withContext(text: string): { toBe(value: unknown): void } };
+
+    expect(() => chained.withContext("renglón 3").toBe(1)).not.toThrow();
+    expect(() => (expect(1) as unknown as typeof chained).withContext("renglón 3").toBe(2)).toThrow(/renglón 3/);
+  });
+});

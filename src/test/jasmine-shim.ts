@@ -1,6 +1,7 @@
 /**
  * La API de Jasmine que usan los specs de Angular (`spyOn`, `jasmine.createSpy`/`createSpyObj`/`addMatchers`, `.and.*`,
- * `.calls.*`, `jasmine.any`/`objectContaining`/…, `xit`/`fit`, `fail`, `toBeTrue`/`toHaveBeenCalledOnceWith`/…) sobre
+ * `.calls.*`, `jasmine.any`/`objectContaining`/…, `xit`/`fit`, `fail`, `toBeTrue`/`toHaveBeenCalledOnceWith`/…,
+ * `expect(x).withContext("…")`) sobre
  * los globals de Vitest (`vi`, `expect`, `it`, `describe`): un spy es un `vi.fn()`/`vi.spyOn()` con `and` y `calls`
  * encima, así también sirven `vi`, `toHaveBeenCalledWith` y compañía. Como en Jasmine, `spyOn` no llama al original
  * (`.and.callThrough()` para eso) y se restaura solo después de cada test (`restoreMocks`, en `TestCommand`).
@@ -183,6 +184,21 @@ export class JasmineShim {
       pass: pass,
       message: function () { return "expected " + context.utils.printReceived(what) + (context.isNot ? " not" : "") + " to pass"; },
     };
+  }
+
+  // expect(x).withContext("…"): como Jasmine, el contexto encabeza el mensaje si falla (el "message" de chai, el mismo
+  // que pone expect(x, "…") de Vitest).
+  var probe = expect(undefined);
+  var assertion = probe && typeof probe === "object" ? Object.getPrototypeOf(probe) : undefined;
+  // El Assertion de Vitest ya trae un withContext que no toca el mensaje: se reemplaza.
+  if (assertion) {
+    Object.defineProperty(assertion, "withContext", {
+      configurable: true,
+      value: function (context) {
+        if (this.__flags) this.__flags.message = context;
+        return this;
+      },
+    });
   }
 
   expect.extend({
